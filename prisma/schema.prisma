@@ -1,0 +1,145 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime @default(now())
+
+  surveys Survey[]
+}
+
+enum SurveyStatus {
+  draft
+  published
+  closed
+}
+
+model Survey {
+  id          String       @id @default(cuid())
+  ownerId     String
+  owner       User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  status      SurveyStatus @default(draft)
+  slug        String       @unique
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  // Design step: how the public survey looks and its intro/closing screens.
+  themePreset          String  @default("modern") // modern | classic | futuristic | minimal | editorial | warm | vibrant
+  themeColor           String  @default("#171717")
+  backgroundColor      String  @default("#fafafa")
+  backgroundImageUrl   String?
+  backgroundImageScope String  @default("all") // cover | all
+  fontFamily           String  @default("sans")
+  buttonShape          String  @default("rounded") // rounded | pill | square
+  surfaceStyle         String  @default("solid") // solid | transparent | blur | glass
+  logoUrl              String?
+  logoSize             Int     @default(120)
+  logoPosition         String  @default("top-center") // top|bottom-left|center|right
+
+  welcomeEnabled     Boolean @default(false)
+  welcomeTitle       String?
+  welcomeText        String?
+  welcomeButtonLabel String?
+
+  thankYouTitle String?
+  thankYouText  String?
+
+  questions Question[]
+  edges     Edge[]
+  responses Response[]
+}
+
+enum QuestionType {
+  single_choice
+  multi_choice
+  dropdown
+  dropdown_matrix
+  image_choice
+  text
+  short_text
+  multiple_text
+  rating
+  slider
+  ranking
+  rating_matrix
+  best_worst
+  name
+  email
+  phone
+  address
+  datetime
+}
+
+model Question {
+  id                    String       @id @default(cuid())
+  surveyId              String
+  survey                Survey       @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  type                  QuestionType
+  title                 String
+  options               Json? // array of { value, label } for choice types
+  positionX             Float        @default(0)
+  positionY             Float        @default(0)
+  isRoot                Boolean      @default(false)
+  required              Boolean      @default(true)
+  minSelections         Int?
+  maxSelections         Int?
+  selectionErrorMessage String?
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  outgoingEdges Edge[]   @relation("SourceQuestion")
+  incomingEdges Edge[]   @relation("TargetQuestion")
+  answers       Answer[]
+
+  @@index([surveyId])
+}
+
+model Edge {
+  id                String   @id @default(cuid())
+  surveyId          String
+  survey            Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  sourceQuestionId  String
+  sourceQuestion    Question @relation("SourceQuestion", fields: [sourceQuestionId], references: [id], onDelete: Cascade)
+  targetQuestionId  String
+  targetQuestion    Question @relation("TargetQuestion", fields: [targetQuestionId], references: [id], onDelete: Cascade)
+  sourceOptionValue String? // null = default/next edge; non-null = conditional branch tied to this option value
+
+  @@index([surveyId])
+  @@index([sourceQuestionId])
+}
+
+model Response {
+  id          String    @id @default(cuid())
+  surveyId    String
+  survey      Survey    @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  answers Answer[]
+
+  @@index([surveyId])
+}
+
+model Answer {
+  id         String   @id @default(cuid())
+  responseId String
+  response   Response @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  value      Json // string | string[] | number depending on question type
+  createdAt  DateTime @default(now())
+
+  @@unique([responseId, questionId])
+  @@index([questionId])
+}

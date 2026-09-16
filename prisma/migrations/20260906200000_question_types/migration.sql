@@ -1,0 +1,14 @@
+ALTER TYPE "QuestionType" ADD VALUE 'dropdown';
+ALTER TYPE "QuestionType" ADD VALUE 'dropdown_matrix';
+ALTER TYPE "QuestionType" ADD VALUE 'image_choice';
+ALTER TYPE "QuestionType" ADD VALUE 'short_text';
+ALTER TYPE "QuestionType" ADD VALUE 'multiple_text';
+ALTER TYPE "QuestionType" ADD VALUE 'slider';
+ALTER TYPE "QuestionType" ADD VALUE 'ranking';
+ALTER TYPE "QuestionType" ADD VALUE 'rating_matrix';
+ALTER TYPE "QuestionType" ADD VALUE 'best_worst';
+ALTER TYPE "QuestionType" ADD VALUE 'name';
+ALTER TYPE "QuestionType" ADD VALUE 'email';
+ALTER TYPE "QuestionType" ADD VALUE 'phone';
+ALTER TYPE "QuestionType" ADD VALUE 'address';
+ALTER TYPE "QuestionType" ADD VALUE 'datetime';
