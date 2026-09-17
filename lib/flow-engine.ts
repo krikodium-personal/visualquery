@@ -74,3 +74,20 @@ export function computeProgress(
 
   return Math.round((answeredCount / total) * 100);
 }
+
+/** Current position and estimated total for a question-count progress label. */
+export function computeQuestionProgress(
+  currentQuestionId: string | null,
+  answeredCount: number,
+  edges: FlowEdge[],
+): { current: number; total: number } {
+  if (!currentQuestionId) {
+    return { current: answeredCount, total: answeredCount };
+  }
+
+  const remaining = questionsLeft(currentQuestionId, edges);
+  return {
+    current: answeredCount + 1,
+    total: answeredCount + remaining,
+  };
+}

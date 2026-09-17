@@ -11,6 +11,7 @@ import type { QuestionOption } from "@/lib/question-options";
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
 import {
   computeProgress,
+  computeQuestionProgress,
   resolveNextQuestionId,
   type AnswerValue,
   type FlowEdge,
@@ -149,6 +150,7 @@ export function SurveyRunner({
     backgroundColor: design.themeColor,
     color: readableTextOn(design.themeColor),
   };
+  const questionProgress = computeQuestionProgress(currentQuestionId, answeredCount, edges);
 
   if (!rootQuestionId || questions.length === 0) {
     return (
@@ -225,15 +227,23 @@ export function SurveyRunner({
         <p className="-mt-2 text-sm text-muted-foreground">{description}</p>
       )}
 
-      <Progress
-        value={computeProgress(currentQuestion.id, answeredCount, edges)}
-        className="[&_[data-slot=progress-indicator]]:bg-[var(--survey-theme)]"
-      >
-        <ProgressLabel className="text-xs font-normal text-muted-foreground">
-          Pregunta {answeredCount + 1}
-        </ProgressLabel>
-        <ProgressValue className="text-xs" />
-      </Progress>
+      {design.showProgress && (
+        <Progress
+          value={computeProgress(currentQuestion.id, answeredCount, edges)}
+          className="[&_[data-slot=progress-indicator]]:bg-[var(--survey-theme)]"
+        >
+          <ProgressLabel className="text-xs font-normal text-muted-foreground">
+            Pregunta {answeredCount + 1}
+          </ProgressLabel>
+          {design.progressDisplay === "questions" ? (
+            <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+              {questionProgress.current}/{questionProgress.total}
+            </span>
+          ) : (
+            <ProgressValue className="text-xs" />
+          )}
+        </Progress>
+      )}
 
       <h2 className="text-3xl font-bold leading-tight">{currentQuestion.title}</h2>
 

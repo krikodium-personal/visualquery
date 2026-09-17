@@ -1,0 +1,2 @@
+ALTER TABLE "Survey"
+ADD COLUMN "showProgress" BOOLEAN NOT NULL DEFAULT true;

@@ -7,6 +7,7 @@ import {
   parseButtonShape,
   parseFontFamily,
   parseLogoPosition,
+  parseProgressDisplay,
   parseSurfaceStyle,
   parseThemePreset,
 } from "@/lib/survey-design";
@@ -68,6 +69,8 @@ export default async function SurveyQuestionsPage({
             logoUrl: survey.logoUrl,
             logoSize: survey.logoSize,
             logoPosition: parseLogoPosition(survey.logoPosition),
+            showProgress: survey.showProgress,
+            progressDisplay: parseProgressDisplay(survey.progressDisplay),
             welcomeEnabled: survey.welcomeEnabled,
             welcomeTitle: survey.welcomeTitle,
             welcomeText: survey.welcomeText,

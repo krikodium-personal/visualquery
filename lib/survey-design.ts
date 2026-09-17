@@ -24,6 +24,7 @@ export type ThemePreset =
   | "warm"
   | "vibrant";
 export type SurfaceStyle = "solid" | "transparent" | "blur" | "glass";
+export type ProgressDisplay = "percentage" | "questions";
 export type LogoPosition =
   | "top-left"
   | "top-center"
@@ -46,6 +47,10 @@ export interface SurveyDesign {
   /** Rendered logo width in pixels. Height remains proportional. */
   logoSize: number;
   logoPosition: LogoPosition;
+  /** Whether respondents see their progress while answering questions. */
+  showProgress: boolean;
+  /** The value shown beside the progress bar. */
+  progressDisplay: ProgressDisplay;
   /** The cover screen shown before the first question. */
   welcomeEnabled: boolean;
   welcomeTitle: string | null;
@@ -216,6 +221,10 @@ export function parseLogoSize(value: number): number {
 
 export function parseSurfaceStyle(value: string): SurfaceStyle {
   return value === "glass" || value === "blur" || value === "transparent" ? value : "solid";
+}
+
+export function parseProgressDisplay(value: string): ProgressDisplay {
+  return value === "questions" ? "questions" : "percentage";
 }
 
 export const BUTTON_SHAPE_OPTIONS: { value: ButtonShape; label: string }[] = [

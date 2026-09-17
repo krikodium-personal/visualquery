@@ -46,6 +46,8 @@ model Survey {
   logoUrl              String?
   logoSize             Int     @default(120)
   logoPosition         String  @default("top-center") // top|bottom-left|center|right
+  showProgress         Boolean @default(true)
+  progressDisplay      String  @default("percentage") // percentage | questions
 
   welcomeEnabled     Boolean @default(false)
   welcomeTitle       String?
