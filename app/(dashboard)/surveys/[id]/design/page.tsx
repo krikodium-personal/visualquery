@@ -35,6 +35,7 @@ export default async function SurveyDesignPage({
     type: q.type,
     options: parseOptions(q.options),
     required: q.required,
+    scoringEnabled: q.scoringEnabled,
     minSelections: q.minSelections,
     maxSelections: q.maxSelections,
     selectionErrorMessage: q.selectionErrorMessage,

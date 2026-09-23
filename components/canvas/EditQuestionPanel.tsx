@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, X } from "lucide-react";
+import { Check, Minus, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,8 +14,10 @@ import {
   OPTION_BASED_TYPES,
   QUESTION_TYPE_GROUPS,
   QUESTION_TYPE_LABELS,
+  SCORABLE_TYPES,
   type QuestionType,
 } from "@/lib/question-types";
+import { questionMaxPoints, pointsLabel } from "@/lib/scoring";
 import { cn } from "@/lib/utils";
 import type { QuestionOption } from "./QuestionNode";
 
@@ -26,6 +28,7 @@ export type QuestionFormValues = {
   type: QuestionType;
   options: QuestionOption[];
   required: boolean;
+  scoringEnabled: boolean;
   minSelections: number | null;
   maxSelections: number | null;
   selectionErrorMessage: string | null;
@@ -85,6 +88,10 @@ function optionHeading(type: QuestionType): string {
     : "Opciones";
 }
 
+function stripScoring(options: QuestionOption[]): QuestionOption[] {
+  return options.map(({ isCorrect: _isCorrect, points: _points, ...rest }) => rest);
+}
+
 export function EditQuestionPanel({ open, onOpenChange, initialValues, code, onSubmit }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -96,6 +103,7 @@ export function EditQuestionPanel({ open, onOpenChange, initialValues, code, onS
   const [type, setType] = useState<QuestionType>("single_choice");
   const [options, setOptions] = useState<QuestionOption[]>([]);
   const [required, setRequired] = useState(true);
+  const [scoringEnabled, setScoringEnabled] = useState(false);
   const [selectionRule, setSelectionRule] = useState<SelectionRule>("any");
   const [selectionCount, setSelectionCount] = useState(1);
   const [selectionErrorMessage, setSelectionErrorMessage] = useState("");
@@ -110,6 +118,9 @@ export function EditQuestionPanel({ open, onOpenChange, initialValues, code, onS
       setType(nextType);
       setOptions(optionsForEdit(nextType, initialValues?.options));
       setRequired(initialValues?.required ?? true);
+      setScoringEnabled(
+        Boolean(initialValues?.scoringEnabled) && SCORABLE_TYPES.includes(nextType),
+      );
       const nextRule = selectionRuleFor(initialValues);
       setSelectionRule(nextRule);
       setSelectionCount(initialValues?.minSelections ?? initialValues?.maxSelections ?? 1);
@@ -121,6 +132,7 @@ export function EditQuestionPanel({ open, onOpenChange, initialValues, code, onS
     if (nextType === type) return;
     setType(nextType);
     setOptions(defaultOptions(nextType));
+    if (!SCORABLE_TYPES.includes(nextType)) setScoringEnabled(false);
     if (nextType !== "multi_choice") {
       setSelectionRule("any");
       setSelectionCount(1);
@@ -132,6 +144,49 @@ export function EditQuestionPanel({ open, onOpenChange, initialValues, code, onS
     setOptions((previous) => previous.map((option) => option.value === value ? { ...option, ...changes } : option));
   };
 
+  const toggleCorrect = (value: string) => {
+    setOptions((previous) =>
+      previous.map((option) => {
+        if (option.value !== value) return option;
+        const nextCorrect = !option.isCorrect;
+        return {
+          ...option,
+          isCorrect: nextCorrect,
+          points: nextCorrect ? Math.max(1, option.points ?? 1) : 0,
+        };
+      }),
+    );
+  };
+
+  const adjustPoints = (value: string, delta: number) => {
+    setOptions((previous) =>
+      previous.map((option) => {
+        if (option.value !== value) return option;
+        const nextPoints = Math.max(0, (option.points ?? (option.isCorrect ? 1 : 0)) + delta);
+        return {
+          ...option,
+          points: nextPoints,
+          isCorrect: nextPoints > 0,
+        };
+      }),
+    );
+  };
+
+  const setPoints = (value: string, raw: string) => {
+    const parsed = Number.parseInt(raw.replace(/\D/g, ""), 10);
+    const nextPoints = Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+    setOptions((previous) =>
+      previous.map((option) => {
+        if (option.value !== value) return option;
+        return {
+          ...option,
+          points: nextPoints,
+          isCorrect: nextPoints > 0,
+        };
+      }),
+    );
+  };
+
   const addOption = (kind?: "row" | "choice") => {
     const base = kind === "row" ? "Fila" : "Opción";
     setOptions((previous) => [...previous, makeOption(previous.length, `${base} ${previous.filter((item) => item.kind === kind).length + 1}`, kind)]);
@@ -141,11 +196,26 @@ export function EditQuestionPanel({ open, onOpenChange, initialValues, code, onS
 
   const cleanOptions = () => {
     if (!OPTION_BASED_TYPES.includes(type) && type !== "dropdown_matrix" && type !== "slider") return [];
-    return options.filter((option) => option.label.trim()).map((option) => ({
-      ...option,
-      label: option.label.trim(),
-      imageUrl: option.imageUrl?.trim() || undefined,
-    }));
+    const allowScoring = scoringEnabled && SCORABLE_TYPES.includes(type);
+    return options.filter((option) => option.label.trim()).map((option) => {
+      const cleaned: QuestionOption = {
+        ...option,
+        label: option.label.trim(),
+        imageUrl: option.imageUrl?.trim() || undefined,
+      };
+      if (!allowScoring) {
+        delete cleaned.isCorrect;
+        delete cleaned.points;
+        return cleaned;
+      }
+      if (cleaned.isCorrect) {
+        cleaned.points = Math.max(1, Math.floor(cleaned.points ?? 1));
+      } else {
+        cleaned.isCorrect = false;
+        cleaned.points = 0;
+      }
+      return cleaned;
+    });
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -157,11 +227,13 @@ export function EditQuestionPanel({ open, onOpenChange, initialValues, code, onS
       const requestedCount = Number.isFinite(selectionCount) ? selectionCount : 1;
       const normalizedCount = Math.max(1, Math.min(requestedCount, cleanedOptions.length));
       const hasSelectionRule = type === "multi_choice" && selectionRule !== "any";
+      const nextScoring = scoringEnabled && SCORABLE_TYPES.includes(type);
       await onSubmit({
         title: title.trim(),
         type,
-        options: cleanedOptions,
+        options: nextScoring ? cleanedOptions : stripScoring(cleanedOptions),
         required,
+        scoringEnabled: nextScoring,
         minSelections: hasSelectionRule && selectionRule !== "at_most" ? normalizedCount : null,
         maxSelections: hasSelectionRule && selectionRule !== "at_least" ? normalizedCount : null,
         selectionErrorMessage:
@@ -178,6 +250,12 @@ export function EditQuestionPanel({ open, onOpenChange, initialValues, code, onS
   const regularOptions = options.filter((option) => !option.kind);
   const matrixRows = options.filter((option) => option.kind === "row");
   const matrixChoices = options.filter((option) => option.kind === "choice");
+  const canScore = SCORABLE_TYPES.includes(type);
+  const maxPoints = questionMaxPoints({
+    type,
+    options: regularOptions,
+    scoringEnabled: scoringEnabled && canScore,
+  });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -215,6 +293,21 @@ export function EditQuestionPanel({ open, onOpenChange, initialValues, code, onS
             <Switch id="question-required" checked={required} onCheckedChange={setRequired} />
           </div>
 
+          {canScore && (
+            <div className="flex items-center gap-3 border-t pt-4">
+              <input
+                id="question-scoring"
+                type="checkbox"
+                checked={scoringEnabled}
+                onChange={(event) => setScoringEnabled(event.target.checked)}
+                className="size-4 accent-emerald-600"
+              />
+              <Label htmlFor="question-scoring" className="cursor-pointer font-normal">
+                Calificar esta pregunta (habilitar el modo de test)
+              </Label>
+            </div>
+          )}
+
           {type === "dropdown_matrix" ? (
             <div className="grid gap-5 border-t pt-4 sm:grid-cols-2">
               <OptionEditor title="Filas" options={matrixRows} onUpdate={updateOption} onRemove={removeOption} onAdd={() => addOption("row")} />
@@ -222,7 +315,23 @@ export function EditQuestionPanel({ open, onOpenChange, initialValues, code, onS
             </div>
           ) : OPTION_BASED_TYPES.includes(type) ? (
             <div className="border-t pt-4">
-              <OptionEditor title={optionHeading(type)} options={regularOptions} imageUrls={type === "image_choice"} onUpdate={updateOption} onRemove={removeOption} onAdd={() => addOption()} />
+              <OptionEditor
+                title={optionHeading(type)}
+                options={regularOptions}
+                imageUrls={type === "image_choice"}
+                scoring={scoringEnabled && canScore}
+                onUpdate={updateOption}
+                onToggleCorrect={toggleCorrect}
+                onAdjustPoints={adjustPoints}
+                onSetPoints={setPoints}
+                onRemove={removeOption}
+                onAdd={() => addOption()}
+              />
+              {scoringEnabled && canScore && (
+                <p className="mt-3 text-sm font-medium text-muted-foreground">
+                  Puntuación máxima: {pointsLabel(maxPoints)}
+                </p>
+              )}
             </div>
           ) : null}
 
@@ -308,29 +417,117 @@ export function EditQuestionPanel({ open, onOpenChange, initialValues, code, onS
   );
 }
 
-function OptionEditor({ title, options, imageUrls = false, onUpdate, onRemove, onAdd }: {
+function OptionEditor({
+  title,
+  options,
+  imageUrls = false,
+  scoring = false,
+  onUpdate,
+  onToggleCorrect,
+  onAdjustPoints,
+  onSetPoints,
+  onRemove,
+  onAdd,
+}: {
   title: string;
   options: QuestionOption[];
   imageUrls?: boolean;
+  scoring?: boolean;
   onUpdate: (value: string, changes: Partial<QuestionOption>) => void;
+  onToggleCorrect?: (value: string) => void;
+  onAdjustPoints?: (value: string, delta: number) => void;
+  onSetPoints?: (value: string, raw: string) => void;
   onRemove: (value: string) => void;
   onAdd: () => void;
 }) {
   return (
     <div className="flex flex-col gap-2">
       <Label>{title}</Label>
-      {options.map((option, index) => (
-        <div key={option.value} className="flex items-start gap-2">
-          <div className="flex flex-1 flex-col gap-2">
-            <Input value={option.label} onChange={(event) => onUpdate(option.value, { label: event.target.value })} placeholder={`Opción ${index + 1}`} required />
-            {imageUrls && <Input value={option.imageUrl ?? ""} onChange={(event) => onUpdate(option.value, { imageUrl: event.target.value })} placeholder="URL de la imagen" type="url" />}
+      {options.map((option, index) => {
+        const pointsValue = option.isCorrect ? Math.max(1, option.points ?? 1) : (option.points ?? 0);
+        return (
+          <div key={option.value} className="flex flex-wrap items-start gap-2 sm:flex-nowrap">
+            {scoring && onToggleCorrect && (
+              <button
+                type="button"
+                onClick={() => onToggleCorrect(option.value)}
+                aria-pressed={Boolean(option.isCorrect)}
+                aria-label={option.isCorrect ? "Marcar como incorrecta" : "Marcar como correcta"}
+                className={cn(
+                  "mt-1 flex size-8 shrink-0 items-center justify-center rounded-md border",
+                  option.isCorrect
+                    ? "border-emerald-600 bg-emerald-600 text-white"
+                    : "border-muted-foreground/40 text-muted-foreground hover:bg-muted",
+                )}
+              >
+                <Check className="size-4" strokeWidth={option.isCorrect ? 3 : 2} />
+              </button>
+            )}
+            <div className="flex min-w-0 flex-1 flex-col gap-2">
+              <Input
+                value={option.label}
+                onChange={(event) => onUpdate(option.value, { label: event.target.value })}
+                placeholder={`Opción ${index + 1}`}
+                required
+              />
+              {imageUrls && (
+                <Input
+                  value={option.imageUrl ?? ""}
+                  onChange={(event) => onUpdate(option.value, { imageUrl: event.target.value })}
+                  placeholder="URL de la imagen"
+                  type="url"
+                />
+              )}
+            </div>
+            {scoring && onAdjustPoints && onSetPoints && (
+              <div className="mt-0.5 flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5">
+                <span className="px-1 text-xs font-medium text-muted-foreground">Puntos</span>
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant="ghost"
+                  onClick={() => onAdjustPoints(option.value, -1)}
+                  disabled={pointsValue <= 0}
+                  aria-label="Restar punto"
+                >
+                  <Minus className="size-3.5" />
+                </Button>
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  value={String(pointsValue)}
+                  onChange={(event) => onSetPoints(option.value, event.target.value)}
+                  aria-label={`Puntos para ${option.label || `opción ${index + 1}`}`}
+                  className="h-7 w-12 px-1 text-center text-sm tabular-nums"
+                />
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant="ghost"
+                  onClick={() => onAdjustPoints(option.value, 1)}
+                  aria-label="Sumar punto"
+                >
+                  <Plus className="size-3.5" />
+                </Button>
+              </div>
+            )}
+            {options.length > 1 && (
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="ghost"
+                onClick={() => onRemove(option.value)}
+                aria-label={`Eliminar ${option.label}`}
+              >
+                <X className="size-4" />
+              </Button>
+            )}
           </div>
-          {options.length > 1 && (
-            <Button type="button" size="icon-sm" variant="ghost" onClick={() => onRemove(option.value)} aria-label={`Eliminar ${option.label}`}><X className="size-4" /></Button>
-          )}
-        </div>
-      ))}
-      <Button type="button" size="sm" variant="outline" onClick={onAdd}><Plus className="size-3.5" /> Agregar</Button>
+        );
+      })}
+      <Button type="button" size="sm" variant="outline" onClick={onAdd}>
+        <Plus className="size-3.5" /> Agregar
+      </Button>
     </div>
   );
 }

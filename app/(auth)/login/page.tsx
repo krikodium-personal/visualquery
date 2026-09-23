@@ -22,9 +22,12 @@ export default function LoginPage() {
   return (
     <div className="flex flex-1 items-center justify-center p-6">
       <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle>Iniciar sesión</CardTitle>
-          <CardDescription>Entrá para armar y gestionar tus encuestas.</CardDescription>
+        <CardHeader className="gap-3">
+          <p className="text-3xl font-bold tracking-tight">Visualquery</p>
+          <div className="space-y-1.5">
+            <CardTitle>Iniciar sesión</CardTitle>
+            <CardDescription>Entrá para armar y gestionar tus encuestas.</CardDescription>
+          </div>
         </CardHeader>
         <CardContent>
           <form action={formAction} className="flex flex-col gap-4">

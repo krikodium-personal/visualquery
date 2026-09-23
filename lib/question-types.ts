@@ -93,3 +93,11 @@ export const BRANCHABLE_TYPES: QuestionType[] = [
   "dropdown",
   "image_choice",
 ];
+
+/** SurveyMonkey-style quiz/test mode: discrete selectable options only. */
+export const SCORABLE_TYPES: QuestionType[] = [
+  "single_choice",
+  "multi_choice",
+  "dropdown",
+  "image_choice",
+];

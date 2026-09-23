@@ -21,6 +21,8 @@ const optionSchema = z.object({
   label: z.string().min(1),
   imageUrl: z.string().url().optional(),
   kind: z.enum(["row", "choice", "scale_left", "scale_center", "scale_right"]).optional(),
+  isCorrect: z.boolean().optional(),
+  points: z.number().int().nonnegative().optional(),
 });
 
 const questionPayloadSchema = z.object({
@@ -32,6 +34,7 @@ const questionPayloadSchema = z.object({
   positionY: z.number(),
   isRoot: z.boolean(),
   required: z.boolean(),
+  scoringEnabled: z.boolean(),
   minSelections: z.number().int().positive().nullable(),
   maxSelections: z.number().int().positive().nullable(),
   selectionErrorMessage: z.string().max(500).nullable(),
@@ -52,6 +55,14 @@ const questionPayloadSchema = z.object({
   (question) =>
     question.maxSelections === null || question.maxSelections <= (question.options?.length ?? 0),
   { message: "El máximo de selecciones no puede superar la cantidad de opciones" },
+).refine(
+  (question) =>
+    !question.scoringEnabled ||
+    question.type === "single_choice" ||
+    question.type === "multi_choice" ||
+    question.type === "dropdown" ||
+    question.type === "image_choice",
+  { message: "El modo test sólo se admite en preguntas con opciones seleccionables" },
 );
 
 const edgePayloadSchema = z.object({
@@ -106,6 +117,7 @@ export async function applyCanvasChanges(
           positionX: q.positionX,
           positionY: q.positionY,
           required: q.required,
+          scoringEnabled: q.scoringEnabled,
           minSelections: q.minSelections,
           maxSelections: q.maxSelections,
           selectionErrorMessage: q.selectionErrorMessage,
@@ -124,6 +136,7 @@ export async function applyCanvasChanges(
           positionY: q.positionY,
           isRoot: q.isRoot,
           required: q.required,
+          scoringEnabled: q.scoringEnabled,
           minSelections: q.minSelections,
           maxSelections: q.maxSelections,
           selectionErrorMessage: q.selectionErrorMessage,

@@ -37,6 +37,7 @@ export default async function SurveyQuestionsPage({
     positionY: q.positionY,
     isRoot: q.isRoot,
     required: q.required,
+    scoringEnabled: q.scoringEnabled,
     minSelections: q.minSelections,
     maxSelections: q.maxSelections,
     selectionErrorMessage: q.selectionErrorMessage,

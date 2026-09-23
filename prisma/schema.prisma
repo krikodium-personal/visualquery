@@ -89,11 +89,12 @@ model Question {
   survey                Survey       @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   type                  QuestionType
   title                 String
-  options               Json? // array of { value, label } for choice types
+  options               Json? // array of { value, label, isCorrect?, points? } for choice types
   positionX             Float        @default(0)
   positionY             Float        @default(0)
   isRoot                Boolean      @default(false)
   required              Boolean      @default(true)
+  scoringEnabled        Boolean      @default(false)
   minSelections         Int?
   maxSelections         Int?
   selectionErrorMessage String?

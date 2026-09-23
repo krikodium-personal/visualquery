@@ -27,6 +27,8 @@ import {
 } from "@/lib/survey-design";
 import { cn } from "@/lib/utils";
 import { QUESTION_TYPE_INSTRUCTIONS, type QuestionType } from "@/lib/question-types";
+import { scoreSurvey } from "@/lib/scoring";
+import { TestResultsReview } from "@/components/survey-runtime/TestResultsReview";
 
 type RuntimeQuestion = {
   id: string;
@@ -34,6 +36,7 @@ type RuntimeQuestion = {
   type: QuestionType;
   options: QuestionOption[];
   required: boolean;
+  scoringEnabled: boolean;
   minSelections: number | null;
   maxSelections: number | null;
   selectionErrorMessage: string | null;
@@ -75,6 +78,7 @@ export function SurveyRunner({
     initialAnswer(questions.find((question) => question.id === rootQuestionId)),
   );
   const [answeredCount, setAnsweredCount] = useState(0);
+  const [answersByQuestion, setAnswersByQuestion] = useState<Record<string, AnswerValue>>({});
   const [finished, setFinished] = useState(preview && previewScreen === "final");
   const [started, setStarted] = useState(
     preview && previewScreen ? previewScreen !== "cover" : !design.welcomeEnabled,
@@ -99,6 +103,7 @@ export function SurveyRunner({
       setSubmitting(true);
       try {
         if (!preview) await submitAnswer(responseId!, currentQuestion.id, value);
+        setAnswersByQuestion((previous) => ({ ...previous, [currentQuestion.id]: value }));
         const nextId = resolveNextQuestionId(currentQuestion.id, value, edges);
         setAnsweredCount((c) => c + 1);
         if (nextId) {
@@ -151,6 +156,7 @@ export function SurveyRunner({
     color: readableTextOn(design.themeColor),
   };
   const questionProgress = computeQuestionProgress(currentQuestionId, answeredCount, edges);
+  const scoreTotals = scoreSurvey(questions, answersByQuestion);
 
   if (!rootQuestionId || questions.length === 0) {
     return (
@@ -161,6 +167,17 @@ export function SurveyRunner({
   }
 
   if (finished) {
+    const showScoreReview =
+      scoreTotals.hasScoring && !(preview && previewScreen === "final" && answeredCount === 0);
+
+    if (showScoreReview) {
+      return (
+        <CenteredCard {...shell} wide>
+          <TestResultsReview questions={questions} answers={answersByQuestion} />
+        </CenteredCard>
+      );
+    }
+
     return (
       <CenteredCard {...shell}>
         <h2 className="text-xl font-semibold">
@@ -280,6 +297,7 @@ function CenteredCard({
   headerAction,
   design,
   cover = false,
+  wide = false,
   children,
 }: {
   title?: string;
@@ -287,13 +305,17 @@ function CenteredCard({
   design: SurveyDesign;
   /** The cover renders its own logo, so the small one is left out. */
   cover?: boolean;
+  /** Slightly wider card for the test-results review. */
+  wide?: boolean;
   children: React.ReactNode;
 }) {
   const { atTop, alignClass } = logoPlacement(design.logoPosition);
   const glassUsesDarkMaterial = readableTextOn(design.backgroundColor) === "#ffffff";
 
+  // Logo lives inside the card frame (same recuadro as questions / thank-you /
+  // score review). The cover screen still paints its own larger logo in children.
   const smallLogo = !cover && design.logoUrl && (
-    <div className={cn("flex w-full max-w-md", alignClass)}>
+    <div className={cn("flex w-full px-6", atTop ? "pt-6" : "pb-6", alignClass)}>
       {/* A URL the survey owner pasted, so it isn't a domain next/image knows. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
@@ -333,15 +355,16 @@ function CenteredCard({
       )}
 
       <div className="relative flex w-full flex-col items-center gap-4">
-        {atTop && smallLogo}
         <Card
           className={cn(
-            "survey-response-card w-full max-w-md",
+            "survey-response-card w-full",
+            wide ? "max-w-lg" : "max-w-md",
             design.surfaceStyle === "transparent" && "survey-response-card--transparent",
             design.surfaceStyle === "blur" && "survey-response-card--blur",
             design.surfaceStyle === "glass" && "survey-response-card--glass",
           )}
         >
+          {atTop && smallLogo}
           {(title || headerAction) && (
             <CardHeader className="flex flex-row items-center justify-between gap-2">
               {title ? <CardTitle>{title}</CardTitle> : <span />}
@@ -349,8 +372,8 @@ function CenteredCard({
             </CardHeader>
           )}
           <CardContent className="flex flex-col gap-4">{children}</CardContent>
+          {!atTop && smallLogo}
         </Card>
-        {!atTop && smallLogo}
       </div>
     </div>
   );

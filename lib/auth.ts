@@ -6,6 +6,13 @@ import { prisma } from "@/lib/prisma";
 export const { handlers, signIn, signOut, auth } = NextAuth({
   session: { strategy: "jwt" },
   pages: { signIn: "/login" },
+  // Distinct cookie names so a concurrent Iconic (or other) NextAuth app on
+  // localhost:3000 does not overwrite Survey's session (cookies ignore port).
+  cookies: {
+    sessionToken: { name: "survey-builder.session-token" },
+    callbackUrl: { name: "survey-builder.callback-url" },
+    csrfToken: { name: "survey-builder.csrf-token" },
+  },
   providers: [
     Credentials({
       credentials: {

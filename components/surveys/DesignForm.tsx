@@ -50,6 +50,7 @@ type PreviewQuestion = {
   type: QuestionType;
   options: QuestionOption[];
   required: boolean;
+  scoringEnabled: boolean;
   minSelections: number | null;
   maxSelections: number | null;
   selectionErrorMessage: string | null;

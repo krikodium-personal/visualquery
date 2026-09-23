@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { QuestionOption } from "@/lib/question-options";
+import { optionPoints } from "@/lib/question-options";
 import { BRANCHABLE_TYPES, QUESTION_TYPE_LABELS, type QuestionType } from "@/lib/question-types";
 import { QuestionTypeIcon } from "@/components/questions/QuestionTypeIcon";
 
@@ -24,6 +25,7 @@ export type QuestionNodeData = {
   options: QuestionOption[];
   isRoot: boolean;
   required: boolean;
+  scoringEnabled: boolean;
   minSelections: number | null;
   maxSelections: number | null;
   selectionErrorMessage: string | null;
@@ -77,6 +79,7 @@ export function QuestionNode({ data, selected }: NodeProps<QuestionNode>) {
               {QUESTION_TYPE_LABELS[data.type]}
             </Badge>
             {!data.required && <Badge variant="outline">Opcional</Badge>}
+            {data.scoringEnabled && <Badge variant="outline">Test</Badge>}
           </div>
           <p className="line-clamp-2 text-sm font-medium">{data.title}</p>
         </div>
@@ -98,26 +101,40 @@ export function QuestionNode({ data, selected }: NodeProps<QuestionNode>) {
 
       {branchable && data.options.length > 0 && (
         <div className="flex flex-col divide-y">
-          {data.options.map((option) => (
-            <div key={option.value} className="relative flex items-center justify-between px-3 py-2 text-xs">
-              <span className="truncate">{option.label}</span>
-              <button
-                type="button"
-                onClick={() => data.onAddBranch(option)}
-                className="flex size-5 shrink-0 items-center justify-center rounded-full border text-muted-foreground hover:bg-muted"
-                title={`Agregar pregunta si responde "${option.label}"`}
-              >
-                <Plus className="size-3" />
-              </button>
-              <Handle
-                type="source"
-                position={Position.Right}
-                id={`option-${option.value}`}
-                className="!bg-primary"
-                style={{ top: "50%" }}
-              />
-            </div>
-          ))}
+          {data.options.map((option) => {
+            const points = data.scoringEnabled ? optionPoints(option) : 0;
+            return (
+              <div key={option.value} className="relative flex items-center justify-between gap-2 px-3 py-2 text-xs">
+                <span className="min-w-0 truncate">{option.label}</span>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  {points > 0 && (
+                    <span
+                      className="flex size-5 items-center justify-center rounded-full bg-emerald-600 text-[10px] font-semibold tabular-nums text-white"
+                      title={`${points} ${points === 1 ? "punto" : "puntos"}`}
+                      aria-label={`${points} ${points === 1 ? "punto" : "puntos"}`}
+                    >
+                      {points}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => data.onAddBranch(option)}
+                    className="flex size-5 items-center justify-center rounded-full border text-muted-foreground hover:bg-muted"
+                    title={`Agregar pregunta si responde "${option.label}"`}
+                  >
+                    <Plus className="size-3" />
+                  </button>
+                </div>
+                <Handle
+                  type="source"
+                  position={Position.Right}
+                  id={`option-${option.value}`}
+                  className="!bg-primary"
+                  style={{ top: "50%" }}
+                />
+              </div>
+            );
+          })}
         </div>
       )}
 

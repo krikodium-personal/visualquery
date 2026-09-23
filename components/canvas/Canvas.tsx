@@ -85,6 +85,7 @@ export type SurveyQuestion = {
   positionY: number;
   isRoot: boolean;
   required: boolean;
+  scoringEnabled: boolean;
   minSelections: number | null;
   maxSelections: number | null;
   selectionErrorMessage: string | null;
@@ -126,6 +127,7 @@ function buildInitialNodes(questions: SurveyQuestion[]): QuestionNode[] {
       options: q.options,
       isRoot: q.isRoot,
       required: q.required,
+      scoringEnabled: q.scoringEnabled,
       minSelections: q.minSelections,
       maxSelections: q.maxSelections,
       selectionErrorMessage: q.selectionErrorMessage,
@@ -377,6 +379,7 @@ export function Canvas({
                   type: values.type,
                   options: values.options,
                   required: values.required,
+                  scoringEnabled: values.scoringEnabled,
                   minSelections: values.minSelections,
                   maxSelections: values.maxSelections,
                   selectionErrorMessage: values.selectionErrorMessage,
@@ -431,6 +434,7 @@ export function Canvas({
           options: values.options,
           isRoot,
           required: values.required,
+          scoringEnabled: values.scoringEnabled,
           minSelections: values.minSelections,
           maxSelections: values.maxSelections,
           selectionErrorMessage: values.selectionErrorMessage,
@@ -478,6 +482,7 @@ export function Canvas({
           positionY: n.position.y,
           isRoot: n.data.isRoot,
           required: n.data.required,
+          scoringEnabled: n.data.scoringEnabled ?? false,
           minSelections: n.data.minSelections ?? null,
           maxSelections: n.data.maxSelections ?? null,
           selectionErrorMessage: n.data.selectionErrorMessage ?? null,
@@ -577,6 +582,7 @@ export function Canvas({
         type: editingNode.data.type,
         options: editingNode.data.options,
         required: editingNode.data.required,
+        scoringEnabled: editingNode.data.scoringEnabled ?? false,
         minSelections: editingNode.data.minSelections ?? null,
         maxSelections: editingNode.data.maxSelections ?? null,
         selectionErrorMessage: editingNode.data.selectionErrorMessage ?? null,
@@ -594,6 +600,7 @@ export function Canvas({
         type: n.data.type,
         options: n.data.options,
         required: n.data.required,
+        scoringEnabled: n.data.scoringEnabled ?? false,
         minSelections: n.data.minSelections ?? null,
         maxSelections: n.data.maxSelections ?? null,
         selectionErrorMessage: n.data.selectionErrorMessage ?? null,
