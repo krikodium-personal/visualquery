@@ -37,6 +37,7 @@ model Survey {
   themePreset          String  @default("modern") // modern | classic | futuristic | minimal | editorial | warm | vibrant
   themeColor           String  @default("#171717")
   backgroundColor      String  @default("#fafafa")
+  colorMode            String  @default("light") // light | dark
   backgroundImageUrl   String?
   backgroundImageScope String  @default("all") // cover | all
   fontFamily           String  @default("sans")

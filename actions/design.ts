@@ -52,6 +52,7 @@ const designSchema = z.object({
   themePreset: z.enum(["modern", "classic", "futuristic", "minimal", "editorial", "warm", "vibrant"]),
   themeColor: hexColor,
   backgroundColor: hexColor,
+  colorMode: z.enum(["light", "dark"]),
   backgroundImageUrl: optionalImageSource("La imagen de fondo"),
   backgroundImageScope: z.enum(["cover", "all"]),
   fontFamily: z.enum([

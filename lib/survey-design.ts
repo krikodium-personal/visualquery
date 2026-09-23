@@ -25,6 +25,7 @@ export type ThemePreset =
   | "vibrant";
 export type SurfaceStyle = "solid" | "transparent" | "blur" | "glass";
 export type ProgressDisplay = "percentage" | "questions";
+export type ColorMode = "light" | "dark";
 export type LogoPosition =
   | "top-left"
   | "top-center"
@@ -38,6 +39,8 @@ export interface SurveyDesign {
   themePreset: ThemePreset;
   themeColor: string;
   backgroundColor: string;
+  /** Manual light/dark layout for the respondent UI. Light is the default. */
+  colorMode: ColorMode;
   backgroundImageUrl: string | null;
   backgroundImageScope: BackgroundImageScope;
   fontFamily: FontFamily;
@@ -225,6 +228,28 @@ export function parseSurfaceStyle(value: string): SurfaceStyle {
 
 export function parseProgressDisplay(value: string): ProgressDisplay {
   return value === "questions" ? "questions" : "percentage";
+}
+
+export const COLOR_MODE_OPTIONS: { value: ColorMode; label: string }[] = [
+  { value: "light", label: "Claro" },
+  { value: "dark", label: "Oscuro" },
+];
+
+export function parseColorMode(value: string): ColorMode {
+  return value === "dark" ? "dark" : "light";
+}
+
+/**
+ * Page background for the public runner. Dark layout uses a neutral dark canvas
+ * when the stored background is still a light preset color.
+ */
+export function runnerBackgroundColor(
+  design: Pick<SurveyDesign, "colorMode" | "backgroundColor">,
+): string {
+  if (design.colorMode !== "dark") return design.backgroundColor;
+  return readableTextOn(design.backgroundColor) === "#000000"
+    ? "#0c0c0c"
+    : design.backgroundColor;
 }
 
 export const BUTTON_SHAPE_OPTIONS: { value: ButtonShape; label: string }[] = [

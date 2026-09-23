@@ -23,6 +23,7 @@ import {
   FONT_STACKS,
   logoPlacement,
   readableTextOn,
+  runnerBackgroundColor,
   type SurveyDesign,
 } from "@/lib/survey-design";
 import { cn } from "@/lib/utils";
@@ -310,7 +311,9 @@ function CenteredCard({
   children: React.ReactNode;
 }) {
   const { atTop, alignClass } = logoPlacement(design.logoPosition);
-  const glassUsesDarkMaterial = readableTextOn(design.backgroundColor) === "#ffffff";
+  const pageBackground = runnerBackgroundColor(design);
+  const isDarkLayout = design.colorMode === "dark";
+  const glassUsesDarkMaterial = readableTextOn(pageBackground) === "#ffffff";
 
   // Logo lives inside the card frame (same recuadro as questions / thank-you /
   // score review). The cover screen still paints its own larger logo in children.
@@ -329,10 +332,14 @@ function CenteredCard({
 
   return (
     <div
-      className="relative flex flex-1 flex-col items-center justify-center gap-4 p-6"
+      className={cn(
+        "relative flex flex-1 flex-col items-center justify-center gap-4 p-6",
+        isDarkLayout && "dark",
+      )}
       style={
         {
-          backgroundColor: design.backgroundColor,
+          backgroundColor: pageBackground,
+          colorScheme: isDarkLayout ? "dark" : "light",
           fontFamily: FONT_STACKS[design.fontFamily],
           "--survey-theme": design.themeColor,
           "--survey-glass-fill": glassUsesDarkMaterial

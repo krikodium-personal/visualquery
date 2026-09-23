@@ -23,6 +23,7 @@ import type { QuestionOption } from "@/lib/question-options";
 import {
   BACKGROUND_IMAGE_SCOPE_OPTIONS,
   BUTTON_SHAPE_OPTIONS,
+  COLOR_MODE_OPTIONS,
   DESIGN_DEFAULTS,
   FONT_OPTIONS,
   FONT_STACKS,
@@ -34,6 +35,7 @@ import {
   THEME_PRESETS,
   type BackgroundImageScope,
   type ButtonShape,
+  type ColorMode,
   type FontFamily,
   type LogoPosition,
   type ProgressDisplay,
@@ -109,6 +111,7 @@ export function DesignForm({
           themePreset: values.themePreset,
           themeColor: values.themeColor,
           backgroundColor: values.backgroundColor,
+          colorMode: values.colorMode,
           backgroundImageUrl: values.backgroundImageUrl ?? "",
           backgroundImageScope: values.backgroundImageScope,
           fontFamily: values.fontFamily,
@@ -354,6 +357,36 @@ export function DesignForm({
               <CardTitle className="text-base">Apariencia</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <div>
+                  <Label>Modo de layout</Label>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Claro es el aspecto actual. Oscuro usa fondos y textos oscuros en la encuesta pública.
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {COLOR_MODE_OPTIONS.map((mode) => {
+                    const selected = values.colorMode === mode.value;
+                    return (
+                      <button
+                        key={mode.value}
+                        type="button"
+                        onClick={() => set("colorMode", mode.value as ColorMode)}
+                        aria-pressed={selected}
+                        className={cn(
+                          "rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors hover:bg-muted/60",
+                          selected && "border-foreground ring-1 ring-foreground",
+                        )}
+                      >
+                        {mode.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="h-px bg-border" />
+
               <div className="flex flex-col gap-2">
                 <div>
                   <Label>Temas</Label>

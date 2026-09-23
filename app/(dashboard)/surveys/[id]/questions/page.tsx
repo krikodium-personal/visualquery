@@ -5,6 +5,7 @@ import { parseOptions } from "@/lib/question-options";
 import {
   parseBackgroundImageScope,
   parseButtonShape,
+  parseColorMode,
   parseFontFamily,
   parseLogoPosition,
   parseProgressDisplay,
@@ -62,6 +63,7 @@ export default async function SurveyQuestionsPage({
             themePreset: parseThemePreset(survey.themePreset),
             themeColor: survey.themeColor,
             backgroundColor: survey.backgroundColor,
+            colorMode: parseColorMode(survey.colorMode),
             backgroundImageUrl: survey.backgroundImageUrl,
             backgroundImageScope: parseBackgroundImageScope(survey.backgroundImageScope),
             fontFamily: parseFontFamily(survey.fontFamily),
