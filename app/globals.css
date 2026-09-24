@@ -2,7 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (&:is(.dark *:not(:is(.survey-force-light, .survey-force-light *)), .dark:not(.survey-force-light)));
 
 @theme inline {
   --color-background: var(--background);
@@ -127,6 +127,15 @@
   html {
     @apply font-sans;
   }
+}
+
+/*
+ * Survey respondent chrome must ignore the builder's html.dark theme.
+ * When a survey is in light mode, mark its shell with .survey-force-light so
+ * dark: utilities from the platform theme do not leak into the preview/runner.
+ */
+.survey-force-light {
+  color-scheme: light;
 }
 
 /* Selected connectors in the survey canvas turn orange, overriding any inline

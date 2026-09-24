@@ -334,7 +334,7 @@ function CenteredCard({
     <div
       className={cn(
         "relative flex flex-1 flex-col items-center justify-center gap-4 p-6",
-        isDarkLayout && "dark",
+        isDarkLayout ? "dark" : "survey-force-light",
       )}
       style={
         {

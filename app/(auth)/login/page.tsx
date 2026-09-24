@@ -7,6 +7,7 @@ import { login } from "@/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BuilderThemeSwitch } from "@/components/theme/BuilderThemeSwitch";
 import {
   Card,
   CardContent,
@@ -20,7 +21,10 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
 
   return (
-    <div className="flex flex-1 items-center justify-center p-6">
+    <div className="relative flex flex-1 items-center justify-center p-6">
+      <div className="absolute top-4 right-4">
+        <BuilderThemeSwitch />
+      </div>
       <Card className="w-full max-w-sm">
         <CardHeader className="gap-3">
           <p className="text-3xl font-bold tracking-tight">Visualquery</p>
