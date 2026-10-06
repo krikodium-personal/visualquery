@@ -1,12 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Filter, X } from "lucide-react";
+import { Filter, GitBranch, ListTree, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AnalysisFilterPanel } from "@/components/analysis/AnalysisFilterPanel";
 import { QuestionResultCard } from "@/components/analysis/QuestionResultCard";
+import { ResponseFlowChart } from "@/components/analysis/ResponseFlowChart";
 import {
   countActiveFilters,
   EMPTY_FILTERS,
@@ -19,6 +21,7 @@ import {
 export function SurveyResultsAnalysis({ data }: { data: AnalysisPayload }) {
   const [filters, setFilters] = useState<AnalysisFilterState>(EMPTY_FILTERS);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [tab, setTab] = useState("summary");
 
   const filteredResponses = useMemo(
     () => filterResponses(data.responses, filters),
@@ -38,7 +41,6 @@ export function SurveyResultsAnalysis({ data }: { data: AnalysisPayload }) {
   }
 
   function removeChip(chip: string) {
-    // Best-effort clear of the matching filter dimension.
     if (chip.startsWith("Completitud:")) {
       setFilters((current) => ({ ...current, completeness: "all" }));
       return;
@@ -62,7 +64,7 @@ export function SurveyResultsAnalysis({ data }: { data: AnalysisPayload }) {
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold">Resumen por pregunta</h2>
+          <h2 className="text-lg font-semibold">Análisis</h2>
           <p className="text-sm text-muted-foreground">{data.surveyTitle}</p>
         </div>
         <Button
@@ -132,23 +134,46 @@ export function SurveyResultsAnalysis({ data }: { data: AnalysisPayload }) {
         </div>
       ) : null}
 
-      {data.questions.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            Esta encuesta todavía no tiene preguntas.
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="flex flex-col gap-4">
-          {data.questions.map((question) => (
-            <QuestionResultCard
-              key={question.id}
-              question={question}
-              responses={filteredResponses}
-            />
-          ))}
-        </div>
-      )}
+      <Tabs value={tab} onValueChange={(value) => setTab(String(value))}>
+        <TabsList variant="line">
+          <TabsTrigger value="summary" className="gap-1.5 px-3">
+            <ListTree className="size-3.5" />
+            Resumen por pregunta
+          </TabsTrigger>
+          <TabsTrigger value="flow" className="gap-1.5 px-3">
+            <GitBranch className="size-3.5" />
+            Flujo
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="summary" className="mt-4">
+          {data.questions.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                Esta encuesta todavía no tiene preguntas.
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {data.questions.map((question) => (
+                <QuestionResultCard
+                  key={question.id}
+                  question={question}
+                  responses={filteredResponses}
+                />
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="flow" className="mt-4">
+          <ResponseFlowChart
+            questions={data.questions}
+            edges={data.edges}
+            responses={filteredResponses}
+          />
+        </TabsContent>
+      </Tabs>
 
       <AnalysisFilterPanel
         open={panelOpen}

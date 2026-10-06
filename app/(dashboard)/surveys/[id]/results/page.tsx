@@ -18,6 +18,7 @@ export default async function SurveyResultsPage({
     where: { id, ownerId: session!.user.id },
     include: {
       questions: { orderBy: { createdAt: "asc" } },
+      edges: true,
       responses: {
         include: { answers: true },
         orderBy: { startedAt: "asc" },
@@ -35,6 +36,12 @@ export default async function SurveyResultsPage({
       type: question.type as QuestionType,
       options: parseOptions(question.options),
       index: index + 1,
+      isRoot: question.isRoot,
+    })),
+    edges: survey.edges.map((edge) => ({
+      sourceQuestionId: edge.sourceQuestionId,
+      targetQuestionId: edge.targetQuestionId,
+      sourceOptionValue: edge.sourceOptionValue,
     })),
     responses: survey.responses.map((response) => ({
       id: response.id,

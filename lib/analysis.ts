@@ -14,6 +14,13 @@ export type AnalysisQuestion = {
   type: QuestionType;
   options: QuestionOption[];
   index: number;
+  isRoot: boolean;
+};
+
+export type AnalysisEdge = {
+  sourceQuestionId: string;
+  targetQuestionId: string;
+  sourceOptionValue: string | null;
 };
 
 export type AnalysisResponse = {
@@ -26,6 +33,7 @@ export type AnalysisResponse = {
 export type AnalysisPayload = {
   surveyTitle: string;
   questions: AnalysisQuestion[];
+  edges: AnalysisEdge[];
   responses: AnalysisResponse[];
 };
 
