@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ImageSourceField } from "@/components/ui/image-source-field";
 import { QuestionTypeIcon } from "@/components/questions/QuestionTypeIcon";
 import {
   BRANCHABLE_TYPES,
@@ -471,11 +472,14 @@ function OptionEditor({
                 required
               />
               {imageUrls && (
-                <Input
-                  value={option.imageUrl ?? ""}
-                  onChange={(event) => onUpdate(option.value, { imageUrl: event.target.value })}
-                  placeholder="URL de la imagen"
-                  type="url"
+                <ImageSourceField
+                  id={`option-image-${option.value}`}
+                  value={option.imageUrl}
+                  onChange={(imageUrl) =>
+                    onUpdate(option.value, { imageUrl: imageUrl ?? undefined })
+                  }
+                  previewFit="cover"
+                  compact
                 />
               )}
             </div>
