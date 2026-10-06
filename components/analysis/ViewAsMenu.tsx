@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -61,9 +60,7 @@ export function ViewAsMenu({
         <ChevronDown className="size-3.5 opacity-60" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64 p-3" sideOffset={6}>
-        <DropdownMenuLabel className="px-0 pb-2 text-xs font-normal text-muted-foreground">
-          Ver como
-        </DropdownMenuLabel>
+        <p className="px-0 pb-2 text-xs font-normal text-muted-foreground">Ver como</p>
         <div className="grid grid-cols-2 gap-2">
           {views.map((view) => {
             const meta = VIEW_META[view];
