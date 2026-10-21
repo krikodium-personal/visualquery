@@ -1,12 +1,8 @@
-import Link from "next/link";
-import { Eye } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { SurveyStatusPill } from "@/components/surveys/SurveyStatusPill";
+import { Card, CardContent } from "@/components/ui/card";
 import { NewSurveyForm } from "./new-survey-form";
-import { SurveyRowActions } from "./survey-row-actions";
+import { SurveyCard } from "./survey-card";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -35,55 +31,15 @@ export default async function DashboardPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {surveys.map((survey) => (
-            <Card key={survey.id} className="border-[#EDE9DE] shadow-[0_0_20px_0_rgb(78_67_37_/_12%)]">
-              <CardHeader className="flex flex-row items-start justify-between gap-3">
-                <CardTitle className="min-w-0 flex-1 line-clamp-1 font-bold">
-                  {survey.title}
-                </CardTitle>
-                <div className="flex shrink-0 items-center gap-1.5">
-                  <SurveyStatusPill
-                    surveyId={survey.id}
-                    status={survey.status}
-                  />
-                  {survey.status === "published" ? (
-                    <Button
-                      size="icon-sm"
-                      variant="ghost"
-                      className="shrink-0"
-                      nativeButton={false}
-                      aria-label="Ver encuesta"
-                      title="Ver encuesta"
-                      render={
-                        <a href={`/s/${survey.slug}`} target="_blank" rel="noreferrer" />
-                      }
-                    >
-                      <Eye className="size-4" />
-                    </Button>
-                  ) : null}
-                </div>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-4">
-                <p className="text-sm text-muted-foreground">
-                  {survey._count.questions} preguntas · {survey._count.responses} respuestas
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    className="flex-1"
-                    nativeButton={false}
-                    render={<Link href={`/surveys/${survey.id}/questions`}>Editar</Link>}
-                  />
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="flex-1"
-                    nativeButton={false}
-                    render={<Link href={`/surveys/${survey.id}/results`}>Resultados</Link>}
-                  />
-                </div>
-                <SurveyRowActions surveyId={survey.id} status={survey.status} slug={survey.slug} />
-              </CardContent>
-            </Card>
+            <SurveyCard
+              key={survey.id}
+              id={survey.id}
+              title={survey.title}
+              status={survey.status}
+              slug={survey.slug}
+              questionCount={survey._count.questions}
+              responseCount={survey._count.responses}
+            />
           ))}
         </div>
       )}

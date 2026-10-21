@@ -47,7 +47,8 @@ export async function createSurvey(_prevState: { error?: string } | undefined, f
 
 export async function deleteSurvey(surveyId: string) {
   const ownerId = await requireUserId();
-  await prisma.survey.deleteMany({ where: { id: surveyId, ownerId } });
+  const result = await prisma.survey.deleteMany({ where: { id: surveyId, ownerId } });
+  if (result.count === 0) throw new Error("Encuesta no encontrada");
   revalidatePath("/dashboard");
 }
 

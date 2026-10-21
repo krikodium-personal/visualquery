@@ -1,20 +1,16 @@
 "use client";
 
-import { useTransition } from "react";
 import { toast } from "sonner";
-import { togglePublish } from "@/actions/surveys";
 import { Button } from "@/components/ui/button";
 
 export function SurveyRowActions({
-  surveyId,
   status,
   slug,
 }: {
-  surveyId: string;
   status: string;
   slug: string;
 }) {
-  const [isPending, startTransition] = useTransition();
+  if (status !== "published") return null;
 
   const copyLink = () => {
     const url = `${window.location.origin}/s/${slug}`;
@@ -24,19 +20,9 @@ export function SurveyRowActions({
 
   return (
     <div className="flex gap-2 text-sm">
-      <Button
-        size="sm"
-        variant="ghost"
-        disabled={isPending}
-        onClick={() => startTransition(() => togglePublish(surveyId))}
-      >
-        {status === "published" ? "Cerrar" : "Abrir"}
+      <Button size="sm" variant="ghost" onClick={copyLink}>
+        Copiar link
       </Button>
-      {status === "published" && (
-        <Button size="sm" variant="ghost" onClick={copyLink}>
-          Copiar link
-        </Button>
-      )}
     </div>
   );
 }
