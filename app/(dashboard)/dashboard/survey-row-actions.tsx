@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import { toast } from "sonner";
-import { deleteSurvey, togglePublish } from "@/actions/surveys";
+import { togglePublish } from "@/actions/surveys";
 import { Button } from "@/components/ui/button";
 
 export function SurveyRowActions({
@@ -37,19 +37,6 @@ export function SurveyRowActions({
           Copiar link
         </Button>
       )}
-      <Button
-        size="sm"
-        variant="ghost"
-        className="text-destructive hover:text-destructive"
-        disabled={isPending}
-        onClick={() => {
-          if (confirm("¿Eliminar esta encuesta? No se puede deshacer.")) {
-            startTransition(() => deleteSurvey(surveyId));
-          }
-        }}
-      >
-        Eliminar
-      </Button>
     </div>
   );
 }

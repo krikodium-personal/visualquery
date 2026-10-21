@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { Button } from "@/components/ui/button";
 import { SurveyStatusPill } from "@/components/surveys/SurveyStatusPill";
 import { SurveySteps } from "@/components/surveys/SurveySteps";
+import { DeleteSurveyButton } from "@/components/surveys/DeleteSurveyButton";
 
 export default async function SurveyLayout({
   children,
@@ -33,8 +34,9 @@ export default async function SurveyLayout({
           >
             <ArrowLeft className="size-4" />
           </Button>
-          <h1 className="text-lg font-semibold">{survey.title}</h1>
+          <h1 className="min-w-0 flex-1 truncate text-lg font-semibold">{survey.title}</h1>
           <SurveyStatusPill surveyId={survey.id} status={survey.status} />
+          <DeleteSurveyButton surveyId={survey.id} surveyTitle={survey.title} />
         </div>
         <div className="pl-11">
           <SurveySteps surveyId={survey.id} />
