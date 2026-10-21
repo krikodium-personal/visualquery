@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Eye } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Button } from "@/components/ui/button";
@@ -63,6 +64,21 @@ export default async function DashboardPage() {
                     nativeButton={false}
                     render={<Link href={`/surveys/${survey.id}/results`}>Resultados</Link>}
                   />
+                  {survey.status === "published" ? (
+                    <Button
+                      size="icon-sm"
+                      variant="outline"
+                      className="shrink-0"
+                      nativeButton={false}
+                      aria-label="Ver encuesta"
+                      title="Ver encuesta"
+                      render={
+                        <a href={`/s/${survey.slug}`} target="_blank" rel="noreferrer" />
+                      }
+                    >
+                      <Eye className="size-4" />
+                    </Button>
+                  ) : null}
                 </div>
                 <SurveyRowActions surveyId={survey.id} status={survey.status} slug={survey.slug} />
               </CardContent>
