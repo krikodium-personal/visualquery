@@ -16,10 +16,26 @@ async function requireSurveyOwnership(surveyId: string) {
   return survey;
 }
 
+const DATA_IMAGE_PATTERN = /^data:image\/(png|jpeg|webp|gif);base64,[a-zA-Z0-9+/=\s]+$/;
+
+const optionalOptionImage = z
+  .string()
+  .trim()
+  .max(2_800_000, "La imagen de la opción supera el tamaño máximo permitido")
+  .refine(
+    (value) =>
+      value === "" ||
+      (/^https?:\/\//.test(value) && value.length <= 2000) ||
+      DATA_IMAGE_PATTERN.test(value),
+    "La imagen de la opción tiene que ser un archivo subido o una URL http(s)",
+  )
+  .transform((value) => (value === "" ? undefined : value))
+  .optional();
+
 const optionSchema = z.object({
   value: z.string().min(1),
   label: z.string().min(1),
-  imageUrl: z.string().url().optional(),
+  imageUrl: optionalOptionImage,
   kind: z.enum(["row", "choice", "scale_left", "scale_center", "scale_right"]).optional(),
   isCorrect: z.boolean().optional(),
   points: z.number().int().nonnegative().optional(),
