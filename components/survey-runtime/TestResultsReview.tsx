@@ -94,6 +94,8 @@ function OptionReviewRow({
   const highlight = state === "selected_correct" || state === "unselected_correct";
   const selectedIncorrect = state === "selected_incorrect";
 
+  const showCorrectLabel = state === "unselected_correct";
+
   return (
     <div
       className={cn(
@@ -113,7 +115,14 @@ function OptionReviewRow({
             className="mb-2 aspect-video max-h-28 w-full rounded object-cover"
           />
         )}
-        <p className="text-sm leading-snug">{option.label}</p>
+        <div className="flex items-start justify-between gap-3">
+          <p className="min-w-0 text-sm leading-snug">{option.label}</p>
+          {showCorrectLabel ? (
+            <span className="shrink-0 text-right text-xs font-medium text-muted-foreground">
+              Respuesta correcta
+            </span>
+          ) : null}
+        </div>
       </div>
     </div>
   );
