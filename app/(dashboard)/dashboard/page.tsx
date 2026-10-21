@@ -40,11 +40,27 @@ export default async function DashboardPage() {
                 <CardTitle className="min-w-0 flex-1 line-clamp-1 font-bold">
                   {survey.title}
                 </CardTitle>
-                <SurveyStatusPill
-                  surveyId={survey.id}
-                  status={survey.status}
-                  className="shrink-0"
-                />
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <SurveyStatusPill
+                    surveyId={survey.id}
+                    status={survey.status}
+                  />
+                  {survey.status === "published" ? (
+                    <Button
+                      size="icon-sm"
+                      variant="ghost"
+                      className="shrink-0"
+                      nativeButton={false}
+                      aria-label="Ver encuesta"
+                      title="Ver encuesta"
+                      render={
+                        <a href={`/s/${survey.slug}`} target="_blank" rel="noreferrer" />
+                      }
+                    >
+                      <Eye className="size-4" />
+                    </Button>
+                  ) : null}
+                </div>
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
                 <p className="text-sm text-muted-foreground">
@@ -64,21 +80,6 @@ export default async function DashboardPage() {
                     nativeButton={false}
                     render={<Link href={`/surveys/${survey.id}/results`}>Resultados</Link>}
                   />
-                  {survey.status === "published" ? (
-                    <Button
-                      size="icon-sm"
-                      variant="outline"
-                      className="shrink-0"
-                      nativeButton={false}
-                      aria-label="Ver encuesta"
-                      title="Ver encuesta"
-                      render={
-                        <a href={`/s/${survey.slug}`} target="_blank" rel="noreferrer" />
-                      }
-                    >
-                      <Eye className="size-4" />
-                    </Button>
-                  ) : null}
                 </div>
                 <SurveyRowActions surveyId={survey.id} status={survey.status} slug={survey.slug} />
               </CardContent>
