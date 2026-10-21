@@ -193,47 +193,6 @@ export function DesignForm({
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-4">
-              <div className="space-y-1">
-                <CardTitle className="text-base">Barra de progreso</CardTitle>
-                <p className="text-sm font-normal text-muted-foreground">
-                  Mostrá el avance mientras se responde la encuesta.
-                </p>
-              </div>
-              <Switch
-                checked={values.showProgress}
-                onCheckedChange={(value) => set("showProgress", value)}
-                aria-label="Mostrar barra de progreso"
-              />
-            </CardHeader>
-            {values.showProgress && (
-              <CardContent>
-                <div className="flex flex-col gap-2">
-                  <Label>Mostrar avance como</Label>
-                  <Select
-                    value={values.progressDisplay}
-                    onValueChange={(value) =>
-                      set("progressDisplay", value as ProgressDisplay)
-                    }
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue>
-                        {(value) =>
-                          value === "questions" ? "Preguntas (1/10)" : "Porcentaje (10%)"
-                        }
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="percentage">Porcentaje (10%)</SelectItem>
-                      <SelectItem value="questions">Preguntas (1/10)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </CardContent>
-            )}
-          </Card>
-
-          <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2">
               <CardTitle className="text-base">Carátula</CardTitle>
               <Switch
@@ -279,6 +238,47 @@ export function DesignForm({
                 </>
               )}
             </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-4">
+              <div className="space-y-1">
+                <CardTitle className="text-base">Barra de progreso</CardTitle>
+                <p className="text-sm font-normal text-muted-foreground">
+                  Mostrá el avance mientras se responde la encuesta.
+                </p>
+              </div>
+              <Switch
+                checked={values.showProgress}
+                onCheckedChange={(value) => set("showProgress", value)}
+                aria-label="Mostrar barra de progreso"
+              />
+            </CardHeader>
+            {values.showProgress && (
+              <CardContent>
+                <div className="flex flex-col gap-2">
+                  <Label>Mostrar avance como</Label>
+                  <Select
+                    value={values.progressDisplay}
+                    onValueChange={(value) =>
+                      set("progressDisplay", value as ProgressDisplay)
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue>
+                        {(value) =>
+                          value === "questions" ? "Preguntas (1/10)" : "Porcentaje (10%)"
+                        }
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="percentage">Porcentaje (10%)</SelectItem>
+                      <SelectItem value="questions">Preguntas (1/10)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardContent>
+            )}
           </Card>
 
           <Card>
