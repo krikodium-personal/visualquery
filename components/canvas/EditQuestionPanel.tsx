@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Check, Minus, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -743,8 +743,41 @@ function OptionEditor({
   onRemove: (value: string) => void;
   onAdd: () => void;
 }) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const pendingFocusNew = useRef(false);
+  const valuesBeforeAdd = useRef<string[]>([]);
+
+  const focusOptionInput = (value: string) => {
+    requestAnimationFrame(() => {
+      const input = listRef.current?.querySelector<HTMLInputElement>(
+        `input[data-option-value="${CSS.escape(value)}"]`,
+      );
+      input?.focus();
+    });
+  };
+
+  useEffect(() => {
+    if (!pendingFocusNew.current) return;
+    const added = options.find((option) => !valuesBeforeAdd.current.includes(option.value));
+    pendingFocusNew.current = false;
+    valuesBeforeAdd.current = [];
+    if (added) focusOptionInput(added.value);
+  }, [options]);
+
+  const handleLabelKeyDown = (event: KeyboardEvent<HTMLInputElement>, index: number) => {
+    if (event.key !== "Tab" || event.shiftKey) return;
+    event.preventDefault();
+    if (index < options.length - 1) {
+      focusOptionInput(options[index + 1].value);
+      return;
+    }
+    valuesBeforeAdd.current = options.map((option) => option.value);
+    pendingFocusNew.current = true;
+    onAdd();
+  };
+
   return (
-    <div className="flex flex-col gap-2">
+    <div ref={listRef} className="flex flex-col gap-2">
       <Label>{title}</Label>
       {options.map((option, index) => {
         const pointsValue = option.isCorrect
@@ -771,6 +804,7 @@ function OptionEditor({
             )}
             <div className="flex min-w-0 flex-1 flex-col gap-2">
               <Input
+                data-option-value={option.value}
                 value={option.label}
                 onChange={(event) => onUpdate(option.value, { label: event.target.value })}
                 onFocus={() => {
@@ -778,6 +812,7 @@ function OptionEditor({
                     onUpdate(option.value, { label: "" });
                   }
                 }}
+                onKeyDown={(event) => handleLabelKeyDown(event, index)}
                 placeholder={`Opción ${index + 1}`}
                 required={!isSpecial}
               />
