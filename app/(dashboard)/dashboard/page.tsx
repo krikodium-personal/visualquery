@@ -9,12 +9,12 @@ export default async function DashboardPage() {
   const surveys = await prisma.survey.findMany({
     where: { ownerId: session!.user.id },
     orderBy: { updatedAt: "desc" },
-    include: { _count: { select: { responses: true, questions: true } } },
+    include: { _count: { select: { responses: true } } },
   });
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-8">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Tus encuestas</h1>
           <p className="text-muted-foreground">Creá una nueva o seguí editando una existente.</p>
@@ -29,7 +29,7 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="rounded-lg border bg-background px-3 sm:px-4">
           {surveys.map((survey) => (
             <SurveyCard
               key={survey.id}
@@ -37,8 +37,8 @@ export default async function DashboardPage() {
               title={survey.title}
               status={survey.status}
               slug={survey.slug}
-              questionCount={survey._count.questions}
               responseCount={survey._count.responses}
+              updatedAt={survey.updatedAt.toISOString()}
             />
           ))}
         </div>

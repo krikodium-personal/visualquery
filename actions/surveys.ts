@@ -129,3 +129,83 @@ export async function updateCollectorOptions(
   revalidatePath(`/surveys/${surveyId}/publish`);
   revalidatePath(`/s/${survey.slug}`);
 }
+
+/** SurveyMonkey-style “Hacer una copia”: clone survey + questions + edges (no responses). */
+export async function duplicateSurvey(surveyId: string): Promise<string> {
+  const ownerId = await requireUserId();
+  const survey = await prisma.survey.findFirst({
+    where: { id: surveyId, ownerId },
+    include: {
+      questions: { orderBy: { createdAt: "asc" } },
+      edges: true,
+    },
+  });
+  if (!survey) throw new Error("Encuesta no encontrada");
+
+  const {
+    id: _id,
+    ownerId: _ownerId,
+    slug: _slug,
+    createdAt: _createdAt,
+    updatedAt: _updatedAt,
+    questions,
+    edges,
+    ...design
+  } = survey;
+
+  const copy = await prisma.survey.create({
+    data: {
+      ...design,
+      ownerId,
+      title: `${survey.title} (copia)`,
+      slug: slugify(survey.title),
+      status: "draft",
+      accessPassword: null,
+      responseLimit: null,
+      cutoffAt: null,
+      analysisViews: [],
+    },
+  });
+
+  const idMap = new Map<string, string>();
+  for (const question of questions) {
+    const created = await prisma.question.create({
+      data: {
+        surveyId: copy.id,
+        type: question.type,
+        title: question.title,
+        options: question.options ?? undefined,
+        positionX: question.positionX,
+        positionY: question.positionY,
+        isRoot: question.isRoot,
+        required: question.required,
+        scoringEnabled: question.scoringEnabled,
+        minSelections: question.minSelections,
+        maxSelections: question.maxSelections,
+        selectionErrorMessage: question.selectionErrorMessage,
+      },
+    });
+    idMap.set(question.id, created.id);
+  }
+
+  if (edges.length > 0) {
+    await prisma.edge.createMany({
+      data: edges.flatMap((edge) => {
+        const sourceQuestionId = idMap.get(edge.sourceQuestionId);
+        const targetQuestionId = idMap.get(edge.targetQuestionId);
+        if (!sourceQuestionId || !targetQuestionId) return [];
+        return [
+          {
+            surveyId: copy.id,
+            sourceQuestionId,
+            targetQuestionId,
+            sourceOptionValue: edge.sourceOptionValue,
+          },
+        ];
+      }),
+    });
+  }
+
+  revalidatePath("/dashboard");
+  return copy.id;
+}
