@@ -875,34 +875,6 @@ export function Canvas({
       >
         <Background />
         <Controls />
-        <Panel
-          position="bottom-right"
-          className="mb-[158px] flex items-center gap-0.5 rounded-lg border bg-card p-1 shadow-sm"
-        >
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="ghost"
-            disabled={!focusedQuestion || focusIndex <= 0}
-            onClick={() => navigateQuestion(-1)}
-            aria-label="Pregunta anterior"
-          >
-            <ChevronLeft className="size-4" />
-          </Button>
-          <span className="min-w-16 px-1 text-center text-xs font-medium tabular-nums">
-            {focusedQuestion ? `preg ${focusedQuestion.code}` : "—"}
-          </span>
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="ghost"
-            disabled={!focusedQuestion || focusIndex >= orderedQuestions.length - 1}
-            onClick={() => navigateQuestion(1)}
-            aria-label="Pregunta siguiente"
-          >
-            <ChevronRight className="size-4" />
-          </Button>
-        </Panel>
         <MiniMap pannable zoomable className="!bg-card" />
         <Panel position="top-right" className="flex items-center gap-2">
           {dirty && (
@@ -924,6 +896,41 @@ export function Canvas({
           </Button>
         </Panel>
       </ReactFlow>
+
+      {/* Outside React Flow panels: RF bottom-right Panel CSS resets margin and
+          the MiniMap was covering the navigator. Sit just above the MiniMap. */}
+      {orderedQuestions.length > 0 ? (
+        <div
+          className="absolute right-4 z-20 flex items-center gap-0.5 rounded-lg border bg-card p-1 shadow-md"
+          style={{ bottom: 178 }}
+          role="navigation"
+          aria-label="Navegar preguntas del lienzo"
+        >
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            disabled={focusIndex <= 0}
+            onClick={() => navigateQuestion(-1)}
+            aria-label="Pregunta anterior"
+          >
+            <ChevronLeft className="size-4" />
+          </Button>
+          <span className="min-w-16 px-1.5 text-center text-xs font-medium tabular-nums">
+            {focusedQuestion ? `preg ${focusedQuestion.code}` : "—"}
+          </span>
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            disabled={focusIndex >= orderedQuestions.length - 1}
+            onClick={() => navigateQuestion(1)}
+            aria-label="Pregunta siguiente"
+          >
+            <ChevronRight className="size-4" />
+          </Button>
+        </div>
+      ) : null}
 
       {nodes.length === 0 && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
