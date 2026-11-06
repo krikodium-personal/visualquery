@@ -44,6 +44,9 @@ const edgeMarker = {
   height: 18,
 };
 const EDGE_RECONNECT_RADIUS = 20;
+/** Question card is `w-64` in QuestionNode; used before RF measures the node. */
+const QUESTION_CARD_WIDTH = 256;
+const QUESTION_CARD_HEIGHT = 170;
 
 const CONNECTOR_COLORS = {
   yes: "#16A34A",
@@ -231,6 +234,41 @@ export function Canvas({
   // every keystroke.
   const nodesRef = useRef(nodes);
   const edgesRef = useRef(edges);
+  const flowRef = useRef<{
+    getNode: (id: string) => QuestionNode | undefined;
+    getZoom: () => number;
+    setCenter: (x: number, y: number, options?: { zoom?: number; duration?: number }) => Promise<boolean>;
+  } | null>(null);
+  const centerTimerRef = useRef<number | null>(null);
+
+  const centerViewportOnQuestion = useCallback(
+    (nodeId: string, fallback: { x: number; y: number }) => {
+      if (centerTimerRef.current !== null) {
+        window.clearTimeout(centerTimerRef.current);
+      }
+      // Wait for commitGraph + dialog close so the node exists in the RF store
+      // and the viewport isn't covered by the modal.
+      centerTimerRef.current = window.setTimeout(() => {
+        centerTimerRef.current = null;
+        const flow = flowRef.current;
+        if (!flow) return;
+        const node = flow.getNode(nodeId);
+        const width = node?.measured?.width ?? QUESTION_CARD_WIDTH;
+        const height = node?.measured?.height ?? QUESTION_CARD_HEIGHT;
+        const x = (node?.position.x ?? fallback.x) + width / 2;
+        const y = (node?.position.y ?? fallback.y) + height / 2;
+        void flow.setCenter(x, y, { zoom: flow.getZoom(), duration: 350 });
+      }, 80);
+    },
+    [],
+  );
+
+  useEffect(
+    () => () => {
+      if (centerTimerRef.current !== null) window.clearTimeout(centerTimerRef.current);
+    },
+    [],
+  );
   useEffect(() => {
     nodesRef.current = nodes;
   }, [nodes]);
@@ -595,8 +633,9 @@ export function Canvas({
       newEdges = applyOptionLogic(newEdges, newId, values.optionLogic, values.options);
       commitGraph(nextNodes, newEdges);
       await persistGraph(nextNodes, newEdges, { successToast: "Pregunta guardada" });
+      centerViewportOnQuestion(newId, position);
     },
-    [dialog, commitGraph, persistGraph],
+    [dialog, commitGraph, persistGraph, centerViewportOnQuestion],
   );
 
   const handleApply = useCallback(async () => {
@@ -745,6 +784,9 @@ export function Canvas({
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onReconnect={onReconnect}
+        onInit={(instance) => {
+          flowRef.current = instance;
+        }}
         edgesReconnectable
         reconnectRadius={EDGE_RECONNECT_RADIUS}
         elevateEdgesOnSelect
