@@ -16,10 +16,14 @@ import { SurveyPasswordGate } from "@/components/surveys/SurveyPasswordGate";
 
 export default async function PublicSurveyPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ embed?: string }>;
 }) {
   const { slug } = await params;
+  const { embed } = await searchParams;
+  const isEmbed = embed === "1" || embed === "true";
 
   const survey = await prisma.survey.findFirst({
     where: { slug, status: { in: ["published", "closed"] } },
@@ -84,7 +88,7 @@ export default async function PublicSurveyPage({
       accessPassword={survey.accessPassword}
       title={survey.title}
     >
-      <div className="flex min-h-svh flex-col">
+      <div className={`flex flex-col ${isEmbed ? "min-h-[640px]" : "min-h-svh"}`}>
         <SurveyRunner
           surveyId={survey.id}
           title={survey.title}

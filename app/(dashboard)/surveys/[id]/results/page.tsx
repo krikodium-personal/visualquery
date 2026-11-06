@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { parseOptions } from "@/lib/question-options";
 import { readAnswerValue, type AnalysisPayload } from "@/lib/analysis";
+import { parseAnalysisViews } from "@/lib/analysis-views";
 import { SurveyResultsAnalysis } from "@/components/analysis/SurveyResultsAnalysis";
 import type { QuestionType } from "@/lib/question-types";
 
@@ -54,5 +55,11 @@ export default async function SurveyResultsPage({
     })),
   };
 
-  return <SurveyResultsAnalysis data={data} />;
+  return (
+    <SurveyResultsAnalysis
+      surveyId={survey.id}
+      data={data}
+      initialViews={parseAnalysisViews(survey.analysisViews)}
+    />
+  );
 }

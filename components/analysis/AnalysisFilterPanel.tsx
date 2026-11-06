@@ -24,12 +24,14 @@ export function AnalysisFilterPanel({
   questions,
   value,
   onChange,
+  onCompare,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   questions: AnalysisQuestion[];
   value: AnalysisFilterState;
   onChange: (next: AnalysisFilterState) => void;
+  onCompare?: () => void;
 }) {
   const [section, setSection] = useState<SectionKey | null>("question");
   const filterableQuestions = useMemo(
@@ -92,7 +94,15 @@ export function AnalysisFilterPanel({
           <Button size="sm" className="flex-1">
             + Filtrar
           </Button>
-          <Button size="sm" variant="outline" className="flex-1" disabled title="Próximamente">
+          <Button
+            size="sm"
+            variant="outline"
+            className="flex-1"
+            onClick={() => {
+              onOpenChange(false);
+              onCompare?.();
+            }}
+          >
             + Comparar
           </Button>
           <Button size="sm" variant="outline" className="flex-1" disabled title="Próximamente">

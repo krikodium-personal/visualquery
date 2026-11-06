@@ -62,6 +62,9 @@ model Survey {
   responseLimit  Int?
   cutoffAt       DateTime?
 
+  // Saved Análisis views (filters + compare groups), JSON array.
+  analysisViews Json @default("[]")
+
   questions Question[]
   edges     Edge[]
   responses Response[]

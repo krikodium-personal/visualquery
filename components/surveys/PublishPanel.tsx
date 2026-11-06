@@ -140,6 +140,38 @@ export function PublishPanel({
 
           <Card>
             <CardHeader>
+              <CardTitle className="text-base">Insertar en un sitio (embed)</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              <p className="text-sm text-muted-foreground">
+                Copiá este código en tu página web para mostrar la encuesta dentro de un iframe.
+              </p>
+              <textarea
+                readOnly
+                rows={4}
+                className="w-full rounded-md border bg-muted/30 p-3 font-mono text-xs leading-relaxed"
+                value={`<iframe src="${publicUrl}?embed=1" width="100%" height="720" style="border:0;border-radius:12px;max-width:640px;" title="Encuesta" loading="lazy"></iframe>`}
+              />
+              <div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={async () => {
+                    const snippet = `<iframe src="${publicUrl}?embed=1" width="100%" height="720" style="border:0;border-radius:12px;max-width:640px;" title="Encuesta" loading="lazy"></iframe>`;
+                    await navigator.clipboard.writeText(snippet);
+                    toast.success("Código embed copiado");
+                  }}
+                >
+                  <Copy className="size-3.5" />
+                  Copiar código
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
               <CardTitle className="text-base">Opciones del recopilador</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
