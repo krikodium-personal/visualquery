@@ -289,9 +289,79 @@ export function Canvas({
     (newNodes: QuestionNode[], newEdges: Edge[]) => {
       setNodes(newNodes);
       setEdges(newEdges);
+      nodesRef.current = newNodes;
+      edgesRef.current = newEdges;
       setDirty(true);
     },
     [setNodes, setEdges],
+  );
+
+  /** Persist the given graph (or current refs) to Supabase/Neon. */
+  const persistGraph = useCallback(
+    async (
+      nodesList: QuestionNode[] = nodesRef.current,
+      edgesList: Edge[] = edgesRef.current,
+      options?: { successToast?: string },
+    ) => {
+      setApplying(true);
+      try {
+        const payload = {
+          questions: nodesList.map((n) => ({
+            id: n.id,
+            title: n.data.title,
+            type: n.data.type,
+            options: n.data.options,
+            positionX: n.position.x,
+            positionY: n.position.y,
+            isRoot: n.data.isRoot,
+            required: n.data.required,
+            scoringEnabled: n.data.scoringEnabled ?? false,
+            minSelections: n.data.minSelections ?? null,
+            maxSelections: n.data.maxSelections ?? null,
+            selectionErrorMessage: n.data.selectionErrorMessage ?? null,
+            requiredErrorMessage: n.data.requiredErrorMessage ?? null,
+            randomizeOptions: n.data.randomizeOptions ?? false,
+          })),
+          edges: edgesList.map((e) => ({
+            sourceQuestionId: e.source,
+            targetQuestionId: e.target,
+            sourceOptionValue: optionValueFromHandle(e.sourceHandle),
+          })),
+        };
+        const { questionIdMap } = await applyCanvasChanges(surveyId, payload);
+
+        let nextNodes = nodesList;
+        let nextEdges = edgesList;
+        if (Object.keys(questionIdMap).length > 0) {
+          nextNodes = nodesList.map((n) => {
+            const realId = questionIdMap[n.id];
+            if (!realId) return n;
+            return { ...n, id: realId, data: { ...n.data, questionId: realId } };
+          });
+          nextEdges = edgesList.map((e) => ({
+            ...e,
+            source: questionIdMap[e.source] ?? e.source,
+            target: questionIdMap[e.target] ?? e.target,
+          }));
+        }
+
+        setNodes(nextNodes);
+        setEdges(nextEdges);
+        nodesRef.current = nextNodes;
+        edgesRef.current = nextEdges;
+        setDirty(false);
+        if (options?.successToast) toast.success(options.successToast);
+      } catch (error) {
+        setDirty(true);
+        toast.error(
+          error instanceof Error ? error.message : "No se pudieron guardar las preguntas",
+        );
+        throw error;
+      } finally {
+        setApplying(false);
+      }
+    },
+    [surveyId, setNodes, setEdges],
   );
 
   const handleAlign = useCallback(() => {
@@ -307,8 +377,9 @@ export function Canvas({
       );
       const newNodes = nodesRef.current.filter((n) => n.id !== questionId);
       commitGraph(newNodes, newEdges);
+      void persistGraph(newNodes, newEdges, { successToast: "Pregunta eliminada" });
     },
-    [commitGraph],
+    [commitGraph, persistGraph],
   );
 
   const onNodesChange = useCallback(
@@ -328,9 +399,13 @@ export function Canvas({
       // question/connection does, so the card stays exactly where it was.
       if (changes.some((c) => c.type === "remove")) {
         setDirty(true);
+        // Persist after React Flow applies the remove to state.
+        queueMicrotask(() => {
+          void persistGraph(nodesRef.current, edgesRef.current);
+        });
       }
     },
-    [onEdgesChangeBase],
+    [onEdgesChangeBase, persistGraph],
   );
 
   const onConnect = useCallback(
@@ -356,9 +431,11 @@ export function Canvas({
         label: optionLabel,
         ...edgeAppearance(sourceOptionValue, optionLabel),
       };
-      commitGraph(nodesRef.current, addEdge(newEdge, filtered));
+      const nextEdges = addEdge(newEdge, filtered);
+      commitGraph(nodesRef.current, nextEdges);
+      void persistGraph(nodesRef.current, nextEdges);
     },
-    [commitGraph],
+    [commitGraph, persistGraph],
   );
 
   const onReconnect = useCallback<OnReconnect>(
@@ -398,8 +475,9 @@ export function Canvas({
       );
 
       commitGraph(nodesRef.current, reconnected);
+      void persistGraph(nodesRef.current, reconnected);
     },
-    [commitGraph],
+    [commitGraph, persistGraph],
   );
 
   const handleCreateSubmit = useCallback(
@@ -453,6 +531,7 @@ export function Canvas({
           values.options,
         );
         commitGraph(newNodes, newEdges);
+        await persistGraph(newNodes, newEdges, { successToast: "Pregunta guardada" });
         return;
       }
 
@@ -512,65 +591,21 @@ export function Canvas({
         newEdges = [...filtered, newEdge];
       }
 
+      const nextNodes = [...nodesRef.current, newNode];
       newEdges = applyOptionLogic(newEdges, newId, values.optionLogic, values.options);
-      commitGraph([...nodesRef.current, newNode], newEdges);
+      commitGraph(nextNodes, newEdges);
+      await persistGraph(nextNodes, newEdges, { successToast: "Pregunta guardada" });
     },
-    [dialog, commitGraph],
+    [dialog, commitGraph, persistGraph],
   );
 
   const handleApply = useCallback(async () => {
-    setApplying(true);
     try {
-      const payload = {
-        questions: nodesRef.current.map((n) => ({
-          id: n.id,
-          title: n.data.title,
-          type: n.data.type,
-          options: n.data.options,
-          positionX: n.position.x,
-          positionY: n.position.y,
-          isRoot: n.data.isRoot,
-          required: n.data.required,
-          scoringEnabled: n.data.scoringEnabled ?? false,
-          minSelections: n.data.minSelections ?? null,
-          maxSelections: n.data.maxSelections ?? null,
-          selectionErrorMessage: n.data.selectionErrorMessage ?? null,
-          requiredErrorMessage: n.data.requiredErrorMessage ?? null,
-          randomizeOptions: n.data.randomizeOptions ?? false,
-        })),
-        edges: edgesRef.current.map((e) => ({
-          sourceQuestionId: e.source,
-          targetQuestionId: e.target,
-          sourceOptionValue: optionValueFromHandle(e.sourceHandle),
-        })),
-      };
-      const { questionIdMap } = await applyCanvasChanges(surveyId, payload);
-
-      if (Object.keys(questionIdMap).length > 0) {
-        setNodes((nds) =>
-          nds.map((n) => {
-            const realId = questionIdMap[n.id];
-            if (!realId) return n;
-            return { ...n, id: realId, data: { ...n.data, questionId: realId } };
-          }),
-        );
-        setEdges((eds) =>
-          eds.map((e) => ({
-            ...e,
-            source: questionIdMap[e.source] ?? e.source,
-            target: questionIdMap[e.target] ?? e.target,
-          })),
-        );
-      }
-
-      setDirty(false);
-      toast.success("Cambios aplicados");
+      await persistGraph(undefined, undefined, { successToast: "Cambios aplicados" });
     } catch {
-      toast.error("No se pudieron aplicar los cambios");
-    } finally {
-      setApplying(false);
+      /* toast already shown in persistGraph */
     }
-  }, [surveyId, setNodes, setEdges]);
+  }, [persistGraph]);
 
   const codes = useMemo(
     () =>
@@ -722,7 +757,11 @@ export function Canvas({
         <Controls />
         <MiniMap pannable zoomable className="!bg-card" />
         <Panel position="top-right" className="flex items-center gap-2">
-          {dirty && <span className="text-xs text-muted-foreground">Cambios sin aplicar</span>}
+          {dirty && (
+            <span className="rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-950 dark:bg-amber-950/40 dark:text-amber-100">
+              Hay cambios sin guardar (p. ej. posición)
+            </span>
+          )}
           <Button size="sm" variant="outline" onClick={handleAlign} disabled={nodes.length === 0}>
             <LayoutGrid className="size-4" />
             Alinear
@@ -733,7 +772,7 @@ export function Canvas({
           </Button>
           <Button size="sm" onClick={handleApply} disabled={!dirty || applying}>
             <Save className="size-4" />
-            {applying ? "Aplicando..." : "Aplicar cambios"}
+            {applying ? "Guardando..." : dirty ? "Guardar posiciones" : "Guardado"}
           </Button>
         </Panel>
       </ReactFlow>
