@@ -148,12 +148,13 @@ export function buildRatingOptions(config: {
   naOption?: QuestionOption;
   otherOption?: QuestionOption;
 }): QuestionOption[] {
+  // Don't trim labels here — live edits call this on every keystroke and
+  // trimming would swallow spaces ("Muy " → "Muy"). cleanOptions trims on save.
   const levels = config.levels.map((level, index) => {
-    const trimmed = level.label.trim();
     const label = config.labelsEnabled
-      ? trimmed || starCountLabel(index + 1)
+      ? (level.label === "" ? starCountLabel(index + 1) : level.label)
       : starCountLabel(index + 1);
-    const value = level.value.trim() || String(index + 1);
+    const value = level.value === "" ? String(index + 1) : level.value;
     return { value, label, kind: "choice" as const };
   });
 

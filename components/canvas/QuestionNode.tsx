@@ -1,12 +1,13 @@
 "use client";
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Star, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { QuestionOption } from "@/lib/question-options";
 import { optionPoints } from "@/lib/question-options";
+import { isRatingLevel } from "@/lib/rating-options";
 import { BRANCHABLE_TYPES, QUESTION_TYPE_LABELS, type QuestionType } from "@/lib/question-types";
 import { QuestionTypeIcon } from "@/components/questions/QuestionTypeIcon";
 
@@ -43,6 +44,10 @@ const isBranchable = (type: QuestionNodeData["type"]) => BRANCHABLE_TYPES.includ
 
 export function QuestionNode({ data, selected }: NodeProps<QuestionNode>) {
   const branchable = isBranchable(data.type);
+  const ratingStarCount =
+    data.type === "rating"
+      ? Math.max(2, data.options.filter(isRatingLevel).length || 5)
+      : 0;
 
   return (
     <div
@@ -84,6 +89,21 @@ export function QuestionNode({ data, selected }: NodeProps<QuestionNode>) {
             {data.scoringEnabled && <Badge variant="outline">Test</Badge>}
           </div>
           <p className="line-clamp-2 text-sm font-medium">{data.title}</p>
+          {ratingStarCount > 0 ? (
+            <div
+              className="mt-2 flex flex-wrap gap-0.5"
+              aria-label={`Escala de ${ratingStarCount} estrellas`}
+            >
+              {Array.from({ length: ratingStarCount }, (_, index) => (
+                <Star
+                  key={index}
+                  className="size-3.5 text-amber-500"
+                  fill="currentColor"
+                  strokeWidth={1.5}
+                />
+              ))}
+            </div>
+          ) : null}
         </div>
         <div className="flex shrink-0 gap-1">
           <Button size="icon-xs" variant="ghost" onClick={data.onEdit} aria-label="Editar">
