@@ -21,7 +21,15 @@ import {
 import "@xyflow/react/dist/style.css";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ChevronLeft, ChevronRight, Plus, Save, Eye, X, LayoutGrid } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
   QuestionNode,
   TARGET_BRANCH,
@@ -697,6 +705,7 @@ export function Canvas({
         .map((node) => ({
           id: node.id,
           code: codes.get(node.id) ?? "?",
+          title: node.data.title,
           position: node.position,
         }))
         .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })),
@@ -719,6 +728,19 @@ export function Canvas({
   );
   const focusedQuestion = orderedQuestions[focusIndex] ?? null;
 
+  const jumpToQuestion = useCallback(
+    (questionId: string) => {
+      const target = orderedQuestions.find((question) => question.id === questionId);
+      if (!target) return;
+      setFocusQuestionId(target.id);
+      setNodes((current) =>
+        current.map((node) => ({ ...node, selected: node.id === target.id })),
+      );
+      centerViewportOnQuestion(target.id, target.position, { delayMs: 0 });
+    },
+    [orderedQuestions, setNodes, centerViewportOnQuestion],
+  );
+
   const navigateQuestion = useCallback(
     (delta: number) => {
       if (orderedQuestions.length === 0) return;
@@ -728,13 +750,9 @@ export function Canvas({
       );
       const target = orderedQuestions[nextIndex];
       if (!target) return;
-      setFocusQuestionId(target.id);
-      setNodes((current) =>
-        current.map((node) => ({ ...node, selected: node.id === target.id })),
-      );
-      centerViewportOnQuestion(target.id, target.position, { delayMs: 0 });
+      jumpToQuestion(target.id);
     },
-    [orderedQuestions, focusIndex, setNodes, centerViewportOnQuestion],
+    [orderedQuestions, focusIndex, jumpToQuestion],
   );
 
   const nodesForFlow = useMemo(
@@ -916,9 +934,41 @@ export function Canvas({
           >
             <ChevronLeft className="size-4" />
           </Button>
-          <span className="min-w-16 px-1.5 text-center text-xs font-medium tabular-nums">
-            {focusedQuestion ? `preg ${focusedQuestion.code}` : "—"}
-          </span>
+          <Select
+            value={focusedQuestion?.id}
+            onValueChange={(value) => {
+              if (typeof value === "string" && value) jumpToQuestion(value);
+            }}
+          >
+            <SelectTrigger
+              size="sm"
+              className={cn(
+                "h-7 min-w-[4.5rem] border-0 bg-transparent px-1.5 shadow-none",
+                "focus-visible:ring-0 data-placeholder:text-foreground",
+              )}
+              aria-label="Saltar a pregunta"
+            >
+              <SelectValue>
+                {() =>
+                  focusedQuestion ? `preg ${focusedQuestion.code}` : "—"
+                }
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent align="center" className="max-h-72 min-w-56">
+              {orderedQuestions.map((question) => (
+                <SelectItem key={question.id} value={question.id}>
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="shrink-0 font-medium tabular-nums">
+                      preg {question.code}
+                    </span>
+                    <span className="truncate text-muted-foreground">
+                      {question.title || "Sin título"}
+                    </span>
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button
             type="button"
             size="icon-sm"
