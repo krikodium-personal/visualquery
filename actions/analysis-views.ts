@@ -6,29 +6,55 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { parseAnalysisViews, type AnalysisView } from "@/lib/analysis-views";
 
-const questionFilterSchema = z.object({
-  questionId: z.string(),
-  values: z.array(z.string()),
-});
-
-const filterStateSchema = z.object({
-  completeness: z.enum(["all", "completed", "partial"]),
-  dateFrom: z.string(),
-  dateTo: z.string(),
-  questionFilters: z.array(questionFilterSchema),
-});
-
-const compareGroupSchema = z.object({
-  id: z.string(),
-  name: z.string().min(1).max(80),
-  filters: filterStateSchema,
-});
+const filterRuleSchema = z.discriminatedUnion("kind", [
+  z.object({
+    id: z.string(),
+    name: z.string(),
+    enabled: z.boolean(),
+    kind: z.literal("question_answer"),
+    questionId: z.string(),
+    values: z.array(z.string()),
+  }),
+  z.object({
+    id: z.string(),
+    name: z.string(),
+    enabled: z.boolean(),
+    kind: z.literal("completeness"),
+    completeness: z.enum(["completed", "partial"]),
+  }),
+  z.object({
+    id: z.string(),
+    name: z.string(),
+    enabled: z.boolean(),
+    kind: z.literal("period"),
+    dateFrom: z.string(),
+    dateTo: z.string(),
+  }),
+]);
 
 const analysisViewSchema = z.object({
   id: z.string(),
   name: z.string().min(1).max(80),
-  filters: filterStateSchema,
-  compareGroups: z.array(compareGroupSchema).max(6),
+  rules: z.object({
+    filters: z.array(filterRuleSchema),
+    compare: z
+      .object({
+        id: z.string(),
+        name: z.string(),
+        enabled: z.boolean(),
+        questionId: z.string(),
+        values: z.array(z.string()),
+      })
+      .nullable(),
+    show: z
+      .object({
+        id: z.string(),
+        name: z.string(),
+        enabled: z.boolean(),
+        questionIds: z.array(z.string()),
+      })
+      .nullable(),
+  }),
   createdAt: z.string(),
 });
 

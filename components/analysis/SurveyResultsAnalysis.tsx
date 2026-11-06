@@ -1,32 +1,28 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Columns2, Download, Filter, GitBranch, ListTree, Users, X } from "lucide-react";
+import { Download, Filter, GitBranch, ListTree, Users, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AnalysisComparePanel } from "@/components/analysis/AnalysisComparePanel";
-import { AnalysisFilterPanel } from "@/components/analysis/AnalysisFilterPanel";
+import { AnalysisRulesPanel } from "@/components/analysis/AnalysisRulesPanel";
 import { AnalysisViewsBar } from "@/components/analysis/AnalysisViewsBar";
 import { CompareResults } from "@/components/analysis/CompareResults";
 import { IndividualResponses } from "@/components/analysis/IndividualResponses";
 import { QuestionResultCard } from "@/components/analysis/QuestionResultCard";
 import { ResponseFlowChart } from "@/components/analysis/ResponseFlowChart";
 import { buildResponsesCsv, downloadCsv } from "@/lib/export-csv";
+import type { AnalysisPayload } from "@/lib/analysis";
 import {
-  countActiveFilters,
-  EMPTY_FILTERS,
-  filterChipLabels,
-  filterResponses,
-  type AnalysisFilterState,
-  type AnalysisPayload,
-} from "@/lib/analysis";
-import {
-  createCompareGroup,
-  type AnalysisView,
-  type CompareGroup,
-} from "@/lib/analysis-views";
+  activeRuleChips,
+  applyFilterRules,
+  countActiveRules,
+  EMPTY_RULES,
+  visibleQuestions,
+  type AnalysisRulesState,
+} from "@/lib/analysis-rules";
+import type { AnalysisView } from "@/lib/analysis-views";
 
 export function SurveyResultsAnalysis({
   surveyId,
@@ -37,59 +33,51 @@ export function SurveyResultsAnalysis({
   data: AnalysisPayload;
   initialViews: AnalysisView[];
 }) {
-  const [filters, setFilters] = useState<AnalysisFilterState>(EMPTY_FILTERS);
+  const [rules, setRules] = useState<AnalysisRulesState>(() => structuredClone(EMPTY_RULES));
   const [panelOpen, setPanelOpen] = useState(false);
-  const [compareOpen, setCompareOpen] = useState(false);
-  const [compareGroups, setCompareGroups] = useState<CompareGroup[]>(() => [
-    createCompareGroup("Grupo A"),
-    createCompareGroup("Grupo B"),
-  ]);
-  const [compareActive, setCompareActive] = useState(false);
   const [views, setViews] = useState<AnalysisView[]>(initialViews);
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
   const [tab, setTab] = useState("summary");
 
   const filteredResponses = useMemo(
-    () => filterResponses(data.responses, filters),
-    [data.responses, filters],
+    () => applyFilterRules(data.responses, rules.filters),
+    [data.responses, rules.filters],
   );
 
-  const activeFilterCount = countActiveFilters(filters);
-  const chips = filterChipLabels(filters, data.questions);
+  const questionsShown = useMemo(
+    () => visibleQuestions(data.questions, rules.show),
+    [data.questions, rules.show],
+  );
+
+  const activeCount = countActiveRules(rules);
+  const chips = activeRuleChips(rules);
   const totalResponses = data.responses.length;
   const filteredCount = filteredResponses.length;
   const completedResponses = filteredResponses.filter((r) => r.completedAt).length;
   const completionRate =
     filteredCount === 0 ? 0 : Math.round((completedResponses / filteredCount) * 100);
+  const compareOn = Boolean(rules.compare?.enabled && rules.compare.values.length >= 2);
 
-  function clearFilters() {
-    setFilters(EMPTY_FILTERS);
+  function clearRules() {
+    setRules(structuredClone(EMPTY_RULES));
     setActiveViewId(null);
+    if (tab === "compare") setTab("summary");
   }
 
-  function removeChip(chip: string) {
+  function removeChip(id: string, kind: "filter" | "compare" | "show") {
     setActiveViewId(null);
-    if (chip.startsWith("Completitud:")) {
-      setFilters((current) => ({ ...current, completeness: "all" }));
-      return;
-    }
-    if (chip.startsWith("Periodo:")) {
-      setFilters((current) => ({ ...current, dateFrom: "", dateTo: "" }));
-      return;
-    }
-    if (chip.startsWith("P")) {
-      const index = Number(chip.slice(1).split(":")[0]);
-      const question = data.questions.find((q) => q.index === index);
-      if (!question) return;
-      setFilters((current) => ({
-        ...current,
-        questionFilters: current.questionFilters.filter((f) => f.questionId !== question.id),
-      }));
-    }
+    setRules((current) => {
+      if (kind === "filter") {
+        return { ...current, filters: current.filters.filter((rule) => rule.id !== id) };
+      }
+      if (kind === "compare") return { ...current, compare: null };
+      return { ...current, show: null };
+    });
+    if (kind === "compare" && tab === "compare") setTab("summary");
   }
 
   function exportCsv() {
-    const csv = buildResponsesCsv(data.questions, filteredResponses);
+    const csv = buildResponsesCsv(questionsShown, filteredResponses);
     const slug = data.surveyTitle
       .toLowerCase()
       .normalize("NFD")
@@ -100,15 +88,20 @@ export function SurveyResultsAnalysis({
   }
 
   function applyView(view: AnalysisView) {
-    setFilters(structuredClone(view.filters));
-    const groups =
-      view.compareGroups.length >= 2
-        ? structuredClone(view.compareGroups)
-        : [createCompareGroup("Grupo A"), createCompareGroup("Grupo B")];
-    setCompareGroups(groups);
-    setCompareActive(view.compareGroups.length >= 2);
+    setRules(structuredClone(view.rules));
     setActiveViewId(view.id);
-    if (view.compareGroups.length >= 2) setTab("compare");
+    if (view.rules.compare?.enabled) setTab("compare");
+    else if (tab === "compare") setTab("summary");
+  }
+
+  function updateRules(next: AnalysisRulesState) {
+    setActiveViewId(null);
+    setRules(next);
+    if (next.compare?.enabled && next.compare.values.length >= 2) {
+      setTab("compare");
+    } else if (tab === "compare") {
+      setTab("summary");
+    }
   }
 
   return (
@@ -124,23 +117,15 @@ export function SurveyResultsAnalysis({
             Exportar CSV
           </Button>
           <Button
-            variant={compareActive ? "default" : "outline"}
-            className="gap-1.5"
-            onClick={() => setCompareOpen(true)}
-          >
-            <Columns2 className="size-4" />
-            Comparar
-          </Button>
-          <Button
-            variant={activeFilterCount > 0 ? "default" : "outline"}
+            variant={activeCount > 0 ? "default" : "outline"}
             onClick={() => setPanelOpen(true)}
             className="gap-1.5"
           >
             <Filter className="size-4" />
-            Parámetros
-            {activeFilterCount > 0 ? (
+            Reglas
+            {activeCount > 0 ? (
               <Badge variant="secondary" className="ml-0.5 bg-background/20 text-current">
-                {activeFilterCount}
+                {activeCount}
               </Badge>
             ) : null}
           </Button>
@@ -150,8 +135,7 @@ export function SurveyResultsAnalysis({
       <AnalysisViewsBar
         surveyId={surveyId}
         views={views}
-        filters={filters}
-        compareGroups={compareActive ? compareGroups : []}
+        rules={rules}
         activeViewId={activeViewId}
         onViewsChange={setViews}
         onApplyView={applyView}
@@ -184,26 +168,29 @@ export function SurveyResultsAnalysis({
         </Card>
       </div>
 
-      {activeFilterCount > 0 ? (
+      {activeCount > 0 ? (
         <div className="rounded-xl border bg-muted/30 px-4 py-3">
           <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-            Filtrados: {filteredCount} de {totalResponses} encuestados
+            Reglas activas · {filteredCount} de {totalResponses} encuestados
+            {rules.show?.enabled
+              ? ` · ${questionsShown.length} de ${data.questions.length} preguntas`
+              : ""}
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             {chips.map((chip) => (
               <button
-                key={chip}
+                key={chip.id}
                 type="button"
-                onClick={() => removeChip(chip)}
+                onClick={() => removeChip(chip.id, chip.kind)}
                 className="inline-flex max-w-full items-center gap-1.5 rounded-full border bg-background px-2.5 py-1 text-xs hover:bg-muted"
-                title="Quitar filtro"
+                title="Quitar regla"
               >
-                <span className="truncate">Filtrar: {chip}</span>
+                <span className="truncate">{chip.label}</span>
                 <X className="size-3 shrink-0 opacity-60" />
               </button>
             ))}
-            <Button variant="ghost" size="xs" onClick={clearFilters}>
-              Limpiar filtros
+            <Button variant="ghost" size="xs" onClick={clearRules}>
+              Limpiar reglas
             </Button>
           </div>
         </div>
@@ -223,24 +210,25 @@ export function SurveyResultsAnalysis({
             <GitBranch className="size-3.5" />
             Flujo
           </TabsTrigger>
-          {compareActive ? (
+          {compareOn ? (
             <TabsTrigger value="compare" className="gap-1.5 px-3">
-              <Columns2 className="size-3.5" />
               Comparar
             </TabsTrigger>
           ) : null}
         </TabsList>
 
         <TabsContent value="summary" className="mt-4">
-          {data.questions.length === 0 ? (
+          {questionsShown.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center text-muted-foreground">
-                Esta encuesta todavía no tiene preguntas.
+                {data.questions.length === 0
+                  ? "Esta encuesta todavía no tiene preguntas."
+                  : "La regla Mostrar no deja ninguna pregunta visible."}
               </CardContent>
             </Card>
           ) : (
             <div className="flex flex-col gap-4">
-              {data.questions.map((question) => (
+              {questionsShown.map((question) => (
                 <QuestionResultCard
                   key={question.id}
                   question={question}
@@ -252,56 +240,34 @@ export function SurveyResultsAnalysis({
         </TabsContent>
 
         <TabsContent value="individual" className="mt-4">
-          <IndividualResponses questions={data.questions} responses={filteredResponses} />
+          <IndividualResponses questions={questionsShown} responses={filteredResponses} />
         </TabsContent>
 
         <TabsContent value="flow" className="mt-4">
           <ResponseFlowChart
-            questions={data.questions}
+            questions={questionsShown}
             edges={data.edges}
             responses={filteredResponses}
           />
         </TabsContent>
 
-        {compareActive ? (
+        {compareOn && rules.compare ? (
           <TabsContent value="compare" className="mt-4">
             <CompareResults
-              questions={data.questions}
-              responses={data.responses}
-              groups={compareGroups}
+              questions={questionsShown}
+              responses={filteredResponses}
+              compare={rules.compare}
             />
           </TabsContent>
         ) : null}
       </Tabs>
 
-      <AnalysisFilterPanel
+      <AnalysisRulesPanel
         open={panelOpen}
         onOpenChange={setPanelOpen}
         questions={data.questions}
-        value={filters}
-        onChange={(next) => {
-          setActiveViewId(null);
-          setFilters(next);
-        }}
-        onCompare={() => setCompareOpen(true)}
-      />
-
-      <AnalysisComparePanel
-        open={compareOpen}
-        onOpenChange={(open) => {
-          setCompareOpen(open);
-          if (!open) {
-            setCompareActive(true);
-            setTab("compare");
-            setActiveViewId(null);
-          }
-        }}
-        questions={data.questions}
-        value={compareGroups}
-        onChange={(next) => {
-          setActiveViewId(null);
-          setCompareGroups(next);
-        }}
+        value={rules}
+        onChange={updateRules}
       />
     </div>
   );

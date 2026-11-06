@@ -7,11 +7,13 @@ import {
   buildChoiceRows,
   isAverageType,
   isChoiceType,
-  filterResponses,
   type AnalysisQuestion,
   type AnalysisResponse,
 } from "@/lib/analysis";
-import type { CompareGroup } from "@/lib/analysis-views";
+import {
+  compareSegments,
+  type CompareRule,
+} from "@/lib/analysis-rules";
 
 const GROUP_COLORS = [
   "hsl(152 55% 42%)",
@@ -22,42 +24,49 @@ const GROUP_COLORS = [
   "hsl(45 75% 45%)",
 ];
 
+/** Side-by-side breakdown by answer choices of one pivot question (SurveyMonkey Compare). */
 export function CompareResults({
   questions,
   responses,
-  groups,
+  compare,
 }: {
   questions: AnalysisQuestion[];
   responses: AnalysisResponse[];
-  groups: CompareGroup[];
+  compare: CompareRule;
 }) {
-  if (groups.length < 2) {
+  const segments = compareSegments(questions, responses, compare);
+  if (segments.length < 2) {
     return (
       <Card>
         <CardContent className="py-12 text-center text-muted-foreground">
-          Definí al menos 2 grupos en Comparar para ver el desglose lado a lado.
+          Elegí al menos 2 opciones de una pregunta en Comparar.
         </CardContent>
       </Card>
     );
   }
 
-  const groupResponses = groups.map((group) => ({
-    group,
-    responses: filterResponses(responses, group.filters),
-  }));
-
-  const comparable = questions.filter((q) => isChoiceType(q.type) || isAverageType(q.type));
+  const pivot = questions.find((q) => q.id === compare.questionId);
+  const comparable = questions.filter(
+    (q) => q.id !== compare.questionId && (isChoiceType(q.type) || isAverageType(q.type)),
+  );
 
   return (
     <div className="flex flex-col gap-4">
+      <div className="rounded-lg border bg-muted/20 px-3 py-2 text-sm">
+        Comparando por{" "}
+        <span className="font-medium">
+          {pivot ? `P${pivot.index}. ${pivot.title}` : "pregunta"}
+        </span>
+      </div>
+
       <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-        {groups.map((group, index) => (
-          <span key={group.id} className="inline-flex items-center gap-1.5">
+        {segments.map((segment, index) => (
+          <span key={segment.key} className="inline-flex items-center gap-1.5">
             <span
               className="size-2.5 rounded-sm"
               style={{ background: GROUP_COLORS[index % GROUP_COLORS.length] }}
             />
-            {group.name} ({groupResponses[index]?.responses.length ?? 0})
+            {segment.label} ({segment.responses.length})
           </span>
         ))}
       </div>
@@ -65,7 +74,7 @@ export function CompareResults({
       {comparable.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
-            No hay preguntas comparables (opción o valoración).
+            No hay otras preguntas cerradas para comparar.
           </CardContent>
         </Card>
       ) : (
@@ -79,19 +88,21 @@ export function CompareResults({
             <CardContent>
               {isAverageType(question.type) ? (
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {groupResponses.map(({ group, responses: subset }, index) => {
-                    const avg = averageOf(answersForQuestion(subset, question.id));
+                  {segments.map((segment, index) => {
+                    const avg = averageOf(answersForQuestion(segment.responses, question.id));
                     return (
                       <div
-                        key={group.id}
+                        key={segment.key}
                         className="rounded-lg border px-3 py-3"
                         style={{ borderColor: GROUP_COLORS[index % GROUP_COLORS.length] }}
                       >
-                        <p className="text-xs text-muted-foreground">{group.name}</p>
+                        <p className="text-xs text-muted-foreground">{segment.label}</p>
                         <p className="mt-1 text-2xl font-semibold tabular-nums">
                           {avg === null ? "—" : avg.toFixed(2)}
                         </p>
-                        <p className="text-xs text-muted-foreground">{subset.length} resp.</p>
+                        <p className="text-xs text-muted-foreground">
+                          {segment.responses.length} resp.
+                        </p>
                       </div>
                     );
                   })}
@@ -102,14 +113,14 @@ export function CompareResults({
                     <thead>
                       <tr className="border-b bg-muted/40 text-left text-muted-foreground">
                         <th className="px-3 py-2 font-medium">Opción</th>
-                        {groups.map((group, index) => (
-                          <th key={group.id} className="px-3 py-2 font-medium">
+                        {segments.map((segment, index) => (
+                          <th key={segment.key} className="px-3 py-2 font-medium">
                             <span className="inline-flex items-center gap-1.5">
                               <span
                                 className="size-2 rounded-full"
                                 style={{ background: GROUP_COLORS[index % GROUP_COLORS.length] }}
                               />
-                              {group.name}
+                              {segment.label}
                             </span>
                           </th>
                         ))}
@@ -119,11 +130,17 @@ export function CompareResults({
                       {question.options.map((option) => (
                         <tr key={option.value} className="border-b last:border-0">
                           <td className="px-3 py-2">{option.label}</td>
-                          {groupResponses.map(({ group, responses: subset }) => {
-                            const rows = buildChoiceRows(question.options, answersForQuestion(subset, question.id));
+                          {segments.map((segment) => {
+                            const rows = buildChoiceRows(
+                              question.options,
+                              answersForQuestion(segment.responses, question.id),
+                            );
                             const row = rows.find((entry) => entry.key === option.value);
                             return (
-                              <td key={`${option.value}-${group.id}`} className="px-3 py-2 tabular-nums">
+                              <td
+                                key={`${option.value}-${segment.key}`}
+                                className="px-3 py-2 tabular-nums"
+                              >
                                 {row
                                   ? `${row.count} (${row.percentage.toLocaleString("es-AR", {
                                       minimumFractionDigits: 0,

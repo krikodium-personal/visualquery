@@ -5,33 +5,26 @@ import { Bookmark, Check, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { AnalysisFilterState } from "@/lib/analysis";
-import {
-  createAnalysisView,
-  type AnalysisView,
-  type CompareGroup,
-} from "@/lib/analysis-views";
+import type { AnalysisRulesState } from "@/lib/analysis-rules";
+import { createAnalysisView, type AnalysisView } from "@/lib/analysis-views";
 import { saveAnalysisViews } from "@/actions/analysis-views";
 
 export function AnalysisViewsBar({
   surveyId,
   views,
-  filters,
-  compareGroups,
+  rules,
   activeViewId,
   onViewsChange,
   onApplyView,
 }: {
   surveyId: string;
   views: AnalysisView[];
-  filters: AnalysisFilterState;
-  compareGroups: CompareGroup[];
+  rules: AnalysisRulesState;
   activeViewId: string | null;
   onViewsChange: (views: AnalysisView[]) => void;
   onApplyView: (view: AnalysisView) => void;
 }) {
   const [name, setName] = useState("");
-  const [saving, setSaving] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   function persist(next: AnalysisView[]) {
@@ -51,11 +44,9 @@ export function AnalysisViewsBar({
       toast.error("Escribí un nombre para la vista");
       return;
     }
-    setSaving(true);
-    const view = createAnalysisView(trimmed, filters, compareGroups);
+    const view = createAnalysisView(trimmed, rules);
     persist([view, ...views]);
     setName("");
-    setSaving(false);
     toast.success("Vista guardada");
   }
 
@@ -69,9 +60,7 @@ export function AnalysisViewsBar({
       <div className="flex flex-wrap items-center gap-2">
         <Bookmark className="size-4 text-muted-foreground" />
         <span className="text-sm font-medium">Vistas guardadas</span>
-        {isPending ? (
-          <span className="text-xs text-muted-foreground">Guardando…</span>
-        ) : null}
+        {isPending ? <span className="text-xs text-muted-foreground">Guardando…</span> : null}
       </div>
 
       {views.length > 0 ? (
@@ -107,7 +96,7 @@ export function AnalysisViewsBar({
         </div>
       ) : (
         <p className="mt-1 text-xs text-muted-foreground">
-          Guardá filtros y grupos de comparación para reutilizarlos.
+          Guardá la combinación actual de reglas (filtrar / comparar / mostrar).
         </p>
       )}
 
@@ -121,7 +110,7 @@ export function AnalysisViewsBar({
             if (event.key === "Enter") handleSave();
           }}
         />
-        <Button size="sm" variant="outline" className="gap-1.5" onClick={handleSave} disabled={saving}>
+        <Button size="sm" variant="outline" className="gap-1.5" onClick={handleSave}>
           <Save className="size-3.5" />
           Guardar vista actual
         </Button>
