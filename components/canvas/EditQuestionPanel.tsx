@@ -61,6 +61,11 @@ function makeOption(index: number, label: string, kind?: QuestionOption["kind"])
   return { value: `opcion-${index + 1}-${crypto.randomUUID().slice(2, 8)}`, label, kind };
 }
 
+/** Default labels like "Opción 4" / "Fila 1" — clear them on focus so the user can type. */
+function isDefaultOptionLabel(label: string): boolean {
+  return /^(Opción|Fila|Campo|Aspecto|Elemento)\s+\d+$/i.test(label.trim());
+}
+
 function makeOtherOption(): QuestionOption {
   return {
     value: `${OTHER_VALUE_PREFIX}${crypto.randomUUID().slice(2, 8)}`,
@@ -261,19 +266,11 @@ export function EditQuestionPanel({
   };
 
   const addOption = (kind?: "row" | "choice") => {
-    const base = kind === "row" ? "Fila" : "Opción";
     setOptions((previous) => {
       const specials = previous.filter((o) => o.kind === "other" || o.kind === "none");
       const normals = previous.filter((o) => o.kind !== "other" && o.kind !== "none");
-      return [
-        ...normals,
-        makeOption(
-          normals.length,
-          `${base} ${normals.filter((item) => item.kind === kind).length + 1}`,
-          kind,
-        ),
-        ...specials,
-      ];
+      // Empty label + placeholder: focus starts ready to type (no "Opción N" to erase).
+      return [...normals, makeOption(normals.length, "", kind), ...specials];
     });
   };
 
@@ -314,7 +311,10 @@ export function EditQuestionPanel({
     }
     const allowScoring = scoringEnabled && SCORABLE_TYPES.includes(type);
     return options
-      .filter((option) => option.label.trim() || option.kind === "other" || option.kind === "none")
+      .filter((option) => {
+        if (option.kind === "other" || option.kind === "none") return true;
+        return option.label.trim().length > 0 && !isDefaultOptionLabel(option.label);
+      })
       .map((option) => {
         const cleaned: QuestionOption = {
           ...option,
@@ -773,6 +773,11 @@ function OptionEditor({
               <Input
                 value={option.label}
                 onChange={(event) => onUpdate(option.value, { label: event.target.value })}
+                onFocus={() => {
+                  if (isDefaultOptionLabel(option.label)) {
+                    onUpdate(option.value, { label: "" });
+                  }
+                }}
                 placeholder={`Opción ${index + 1}`}
                 required={!isSpecial}
               />
