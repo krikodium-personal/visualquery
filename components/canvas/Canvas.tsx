@@ -21,7 +21,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Plus, Save, Eye, X, LayoutGrid } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Save, Eye, X, LayoutGrid } from "lucide-react";
 import {
   QuestionNode,
   TARGET_BRANCH,
@@ -242,13 +242,11 @@ export function Canvas({
   const centerTimerRef = useRef<number | null>(null);
 
   const centerViewportOnQuestion = useCallback(
-    (nodeId: string, fallback: { x: number; y: number }) => {
+    (nodeId: string, fallback: { x: number; y: number }, options?: { delayMs?: number }) => {
       if (centerTimerRef.current !== null) {
         window.clearTimeout(centerTimerRef.current);
       }
-      // Wait for commitGraph + dialog close so the node exists in the RF store
-      // and the viewport isn't covered by the modal.
-      centerTimerRef.current = window.setTimeout(() => {
+      const run = () => {
         centerTimerRef.current = null;
         const flow = flowRef.current;
         if (!flow) return;
@@ -258,9 +256,21 @@ export function Canvas({
         const x = (node?.position.x ?? fallback.x) + width / 2;
         const y = (node?.position.y ?? fallback.y) + height / 2;
         void flow.setCenter(x, y, { zoom: flow.getZoom(), duration: 350 });
-      }, 80);
+      };
+      const delayMs = options?.delayMs ?? 80;
+      // Default delay waits for commitGraph + dialog close so the node exists
+      // in the RF store and the viewport isn't covered by the modal.
+      if (delayMs <= 0) {
+        run();
+        return;
+      }
+      centerTimerRef.current = window.setTimeout(run, delayMs);
     },
     [],
+  );
+
+  const [focusQuestionId, setFocusQuestionId] = useState<string | null>(
+    () => initialNodes[0]?.id ?? null,
   );
 
   useEffect(
@@ -395,6 +405,11 @@ export function Canvas({
           setEdges(nextEdges);
           nodesRef.current = nextNodes;
           edgesRef.current = nextEdges;
+          if (Object.keys(questionIdMap).length > 0) {
+            setFocusQuestionId((current) =>
+              current && questionIdMap[current] ? questionIdMap[current]! : current,
+            );
+          }
           setDirty(false);
           if (capturedOptions?.successToast) toast.success(capturedOptions.successToast);
         } catch (error) {
@@ -649,6 +664,7 @@ export function Canvas({
       newEdges = applyOptionLogic(newEdges, newId, values.optionLogic, values.options);
       commitGraph(nextNodes, newEdges);
       await persistGraph(nextNodes, newEdges, { successToast: "Pregunta guardada" });
+      setFocusQuestionId(newId);
       centerViewportOnQuestion(newId, position);
     },
     [dialog, commitGraph, persistGraph, centerViewportOnQuestion],
@@ -673,6 +689,52 @@ export function Canvas({
         })),
       ),
     [nodes, edges],
+  );
+
+  const orderedQuestions = useMemo(
+    () =>
+      [...nodes]
+        .map((node) => ({
+          id: node.id,
+          code: codes.get(node.id) ?? "?",
+          position: node.position,
+        }))
+        .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })),
+    [nodes, codes],
+  );
+
+  useEffect(() => {
+    if (orderedQuestions.length === 0) {
+      if (focusQuestionId !== null) setFocusQuestionId(null);
+      return;
+    }
+    if (!focusQuestionId || !orderedQuestions.some((question) => question.id === focusQuestionId)) {
+      setFocusQuestionId(orderedQuestions[0]!.id);
+    }
+  }, [orderedQuestions, focusQuestionId]);
+
+  const focusIndex = Math.max(
+    0,
+    orderedQuestions.findIndex((question) => question.id === focusQuestionId),
+  );
+  const focusedQuestion = orderedQuestions[focusIndex] ?? null;
+
+  const navigateQuestion = useCallback(
+    (delta: number) => {
+      if (orderedQuestions.length === 0) return;
+      const nextIndex = Math.min(
+        orderedQuestions.length - 1,
+        Math.max(0, focusIndex + delta),
+      );
+      const target = orderedQuestions[nextIndex];
+      if (!target) return;
+      setFocusQuestionId(target.id);
+      setNodes((current) =>
+        current.map((node) => ({ ...node, selected: node.id === target.id })),
+      );
+      centerViewportOnQuestion(target.id, target.position, { delayMs: 0 });
+    },
+    [orderedQuestions, focusIndex, setNodes, centerViewportOnQuestion],
   );
 
   const nodesForFlow = useMemo(
@@ -813,6 +875,34 @@ export function Canvas({
       >
         <Background />
         <Controls />
+        <Panel
+          position="bottom-right"
+          className="mb-[158px] flex items-center gap-0.5 rounded-lg border bg-card p-1 shadow-sm"
+        >
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            disabled={!focusedQuestion || focusIndex <= 0}
+            onClick={() => navigateQuestion(-1)}
+            aria-label="Pregunta anterior"
+          >
+            <ChevronLeft className="size-4" />
+          </Button>
+          <span className="min-w-16 px-1 text-center text-xs font-medium tabular-nums">
+            {focusedQuestion ? `preg ${focusedQuestion.code}` : "—"}
+          </span>
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            disabled={!focusedQuestion || focusIndex >= orderedQuestions.length - 1}
+            onClick={() => navigateQuestion(1)}
+            aria-label="Pregunta siguiente"
+          >
+            <ChevronRight className="size-4" />
+          </Button>
+        </Panel>
         <MiniMap pannable zoomable className="!bg-card" />
         <Panel position="top-right" className="flex items-center gap-2">
           {dirty && (
