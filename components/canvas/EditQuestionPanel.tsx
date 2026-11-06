@@ -1,7 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { Check, Minus, Plus, X } from "lucide-react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+  type KeyboardEvent,
+} from "react";
+import { Check, Heart, Minus, Plus, Star, ThumbsUp, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,6 +17,13 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ImageSourceField } from "@/components/ui/image-source-field";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { QuestionTypeIcon } from "@/components/questions/QuestionTypeIcon";
 import {
   BRANCHABLE_TYPES,
@@ -18,6 +33,15 @@ import {
   SCORABLE_TYPES,
   type QuestionType,
 } from "@/lib/question-types";
+import {
+  DEFAULT_RATING_LABELS,
+  RATING_SHAPES,
+  buildRatingOptions,
+  defaultRatingOptions,
+  parseRatingConfig,
+  starCountLabel,
+  type RatingShape,
+} from "@/lib/rating-options";
 import { questionMaxPoints, pointsLabel } from "@/lib/scoring";
 import { cn } from "@/lib/utils";
 import type { QuestionOption } from "./QuestionNode";
@@ -83,6 +107,7 @@ function makeNoneOption(): QuestionOption {
 }
 
 function defaultOptions(type: QuestionType): QuestionOption[] {
+  if (type === "rating") return defaultRatingOptions();
   if (type === "slider") {
     return [
       { value: "scale-left", label: "0", kind: "scale_left" },
@@ -106,6 +131,20 @@ function defaultOptions(type: QuestionType): QuestionOption[] {
 }
 
 function optionsForEdit(type: QuestionType, stored: QuestionOption[] | undefined): QuestionOption[] {
+  if (type === "rating") {
+    if (!stored?.length) return defaultRatingOptions();
+    const config = parseRatingConfig(stored);
+    return buildRatingOptions({
+      shape: config.shape,
+      color: config.color,
+      labelsEnabled: config.labelsEnabled,
+      levels: config.levels.map((level) => ({ value: level.value, label: level.label })),
+      hasNa: config.hasNa,
+      hasOther: config.hasOther,
+      naOption: config.naOption,
+      otherOption: config.otherOption,
+    });
+  }
   if (type !== "slider") return stored?.length ? stored : defaultOptions(type);
   const defaults = defaultOptions(type);
   return defaults.map((fallback) => stored?.find((option) => option.kind === fallback.kind) ?? fallback);
@@ -306,6 +345,24 @@ export function EditQuestionPanel({
   };
 
   const cleanOptions = () => {
+    if (type === "rating") {
+      const config = parseRatingConfig(options);
+      return buildRatingOptions({
+        shape: config.shape,
+        color: config.color,
+        labelsEnabled: config.labelsEnabled,
+        levels: config.levels.map((level, index) => ({
+          value: level.value.trim() || String(index + 1),
+          label: config.labelsEnabled
+            ? level.label.trim() || starCountLabel(index + 1)
+            : starCountLabel(index + 1),
+        })),
+        hasNa: config.hasNa,
+        hasOther: config.hasOther,
+        naOption: config.naOption,
+        otherOption: config.otherOption,
+      });
+    }
     if (!OPTION_BASED_TYPES.includes(type) && type !== "dropdown_matrix" && type !== "slider") {
       return [];
     }
@@ -339,7 +396,45 @@ export function EditQuestionPanel({
       });
   };
 
-  const handleSubmit = async (event: React.FormEvent) => {
+  const patchRating = (
+    patch: Partial<{
+      shape: RatingShape;
+      color: string;
+      labelsEnabled: boolean;
+      hasNa: boolean;
+      hasOther: boolean;
+      levels: { value: string; label: string }[];
+    }>,
+  ) => {
+    setOptions((previous) => {
+      const config = parseRatingConfig(previous);
+      const labelsEnabled = patch.labelsEnabled ?? config.labelsEnabled;
+      let levels = (patch.levels ?? config.levels.map((level) => ({
+        value: level.value,
+        label: level.label,
+      }))).map((level) => ({ ...level }));
+
+      if (patch.labelsEnabled === true && !config.labelsEnabled) {
+        levels = levels.map((level, index) => ({
+          ...level,
+          label: DEFAULT_RATING_LABELS[index] ?? level.label,
+        }));
+      }
+
+      return buildRatingOptions({
+        shape: patch.shape ?? config.shape,
+        color: patch.color ?? config.color,
+        labelsEnabled,
+        levels,
+        hasNa: patch.hasNa ?? config.hasNa,
+        hasOther: patch.hasOther ?? config.hasOther,
+        naOption: config.naOption,
+        otherOption: config.otherOption,
+      });
+    });
+  };
+
+  const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (!title.trim()) return;
     setSaving(true);
@@ -565,6 +660,10 @@ export function EditQuestionPanel({
                   })}
                 </div>
               )}
+
+              {type === "rating" && (
+                <RatingEditor options={options} onPatch={patchRating} />
+              )}
             </>
           ) : null}
 
@@ -717,6 +816,166 @@ export function EditQuestionPanel({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function RatingShapeIcon({
+  shape,
+  className,
+  style,
+}: {
+  shape: RatingShape;
+  className?: string;
+  style?: CSSProperties;
+}) {
+  if (shape === "heart") return <Heart className={className} style={style} />;
+  if (shape === "thumb") return <ThumbsUp className={className} style={style} />;
+  return <Star className={className} style={style} />;
+}
+
+function RatingEditor({
+  options,
+  onPatch,
+}: {
+  options: QuestionOption[];
+  onPatch: (
+    patch: Partial<{
+      shape: RatingShape;
+      color: string;
+      labelsEnabled: boolean;
+      hasNa: boolean;
+      hasOther: boolean;
+      levels: { value: string; label: string }[];
+    }>,
+  ) => void;
+}) {
+  const config = parseRatingConfig(options);
+  const shapeLabel =
+    RATING_SHAPES.find((item) => item.value === config.shape)?.label ?? "Estrella";
+
+  const updateLevel = (index: number, changes: Partial<{ value: string; label: string }>) => {
+    const levels = config.levels.map((level, levelIndex) =>
+      levelIndex === index
+        ? {
+            value: changes.value ?? level.value,
+            label: changes.label ?? level.label,
+          }
+        : { value: level.value, label: level.label },
+    );
+    onPatch({ levels });
+  };
+
+  return (
+    <div className="flex flex-col gap-4 border-t pt-4">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="flex flex-col gap-2">
+          <Label>Forma</Label>
+          <Select
+            value={config.shape}
+            onValueChange={(value) => onPatch({ shape: value as RatingShape })}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue>{() => shapeLabel}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {RATING_SHAPES.map((shape) => (
+                <SelectItem key={shape.value} value={shape.value}>
+                  {shape.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="rating-color">Color</Label>
+          <div className="flex items-center gap-2">
+            <input
+              id="rating-color"
+              type="color"
+              value={config.color}
+              onChange={(event) => onPatch({ color: event.target.value })}
+              className="size-9 cursor-pointer rounded-md border bg-transparent p-1"
+              aria-label="Color de la valoración"
+            />
+            <RatingShapeIcon
+              shape={config.shape}
+              className="size-6"
+              style={{ color: config.color }}
+            />
+            <Input
+              value={config.color}
+              onChange={(event) => onPatch({ color: event.target.value })}
+              className="font-mono text-sm uppercase"
+              aria-label="Código de color"
+            />
+          </div>
+        </div>
+      </div>
+
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          className="accent-emerald-600"
+          checked={config.labelsEnabled}
+          onChange={(event) => onPatch({ labelsEnabled: event.target.checked })}
+        />
+        Agregar etiquetas de calificación
+      </label>
+
+      {config.labelsEnabled ? (
+        <div className="flex flex-col gap-2">
+          <div className="grid grid-cols-[7rem_1fr_4.5rem] items-center gap-2 px-0.5 text-xs font-medium text-muted-foreground">
+            <span />
+            <span>Etiqueta</span>
+            <span className="text-center">Valor</span>
+          </div>
+          {config.levels.map((level, index) => (
+            <div
+              key={`${level.value}-${index}`}
+              className="grid grid-cols-[7rem_1fr_4.5rem] items-center gap-2"
+            >
+              <span className="text-sm text-muted-foreground">{starCountLabel(index + 1)}</span>
+              <Input
+                value={level.label}
+                onChange={(event) => updateLevel(index, { label: event.target.value })}
+                placeholder={DEFAULT_RATING_LABELS[index] ?? starCountLabel(index + 1)}
+              />
+              <Input
+                type="text"
+                inputMode="numeric"
+                value={level.value}
+                onChange={(event) =>
+                  updateLevel(index, { value: event.target.value.replace(/[^\d.-]/g, "") })
+                }
+                className="text-center tabular-nums"
+                aria-label={`Valor para ${starCountLabel(index + 1)}`}
+              />
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="flex flex-col gap-2">
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="accent-foreground"
+            checked={config.hasNa}
+            onChange={(event) => onPatch({ hasNa: event.target.checked })}
+          />
+          Agregar una columna N/A
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="accent-foreground"
+            checked={config.hasOther}
+            onChange={(event) => onPatch({ hasOther: event.target.checked })}
+          />
+          Agregar una opción de respuesta «Otra» para comentarios
+        </label>
+      </div>
+    </div>
   );
 }
 

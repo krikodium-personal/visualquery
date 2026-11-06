@@ -97,7 +97,12 @@ export function answerIncludesValue(answer: AnalysisAnswerValue, value: string):
 }
 
 export function answerNumeric(answer: AnalysisAnswerValue): number | null {
-  return typeof answer === "number" && Number.isFinite(answer) ? answer : null;
+  if (typeof answer === "number" && Number.isFinite(answer)) return answer;
+  if (typeof answer === "object" && answer !== null && !Array.isArray(answer)) {
+    const rating = answer.rating;
+    if (typeof rating === "number" && Number.isFinite(rating)) return rating;
+  }
+  return null;
 }
 
 export function countActiveFilters(filters: AnalysisFilterState): number {

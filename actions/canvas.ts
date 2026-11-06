@@ -37,7 +37,18 @@ const optionSchema = z.object({
   label: z.string().min(1),
   imageUrl: optionalOptionImage,
   kind: z
-    .enum(["row", "choice", "scale_left", "scale_center", "scale_right", "other", "none"])
+    .enum([
+      "row",
+      "choice",
+      "scale_left",
+      "scale_center",
+      "scale_right",
+      "other",
+      "none",
+      "rating_shape",
+      "rating_color",
+      "rating_labels",
+    ])
     .optional(),
   isCorrect: z.boolean().optional(),
   points: z.number().int().nonnegative().optional(),

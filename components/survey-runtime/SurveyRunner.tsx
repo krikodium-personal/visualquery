@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Menu, SkipForward, Star } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { Heart, Menu, SkipForward, Star, ThumbsUp } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -28,8 +28,26 @@ import {
 } from "@/lib/survey-design";
 import { cn } from "@/lib/utils";
 import { QUESTION_TYPE_INSTRUCTIONS, type QuestionType } from "@/lib/question-types";
+import { parseRatingConfig, type RatingShape } from "@/lib/rating-options";
 import { scoreSurvey } from "@/lib/scoring";
 import { TestResultsReview } from "@/components/survey-runtime/TestResultsReview";
+
+function RatingShapeIcon({
+  shape,
+  filled,
+  className,
+  style,
+}: {
+  shape: RatingShape;
+  filled: boolean;
+  className?: string;
+  style?: CSSProperties;
+}) {
+  const fill = filled ? "currentColor" : "none";
+  if (shape === "heart") return <Heart className={className} style={style} fill={fill} />;
+  if (shape === "thumb") return <ThumbsUp className={className} style={style} fill={fill} />;
+  return <Star className={className} style={style} fill={fill} />;
+}
 
 type RuntimeQuestion = {
   id: string;
@@ -303,16 +321,26 @@ export function SurveyRunner({
         shapeClass={shapeClass}
       />
 
-      {!(["single_choice", "image_choice", "rating"] as QuestionType[]).includes(currentQuestion.type) && (
-        <Button
-          className={cn("mt-2 w-full", shapeClass)}
-          style={themeButtonStyle}
-          disabled={submitting || !isAnswerComplete(currentQuestion, draft) || !ready}
-          onClick={handleSubmit}
-        >
-          {submitting ? "Enviando..." : "Siguiente"}
-        </Button>
-      )}
+      {(() => {
+        const ratingHasOther =
+          currentQuestion.type === "rating" &&
+          currentQuestion.options.some((option) => option.kind === "other");
+        const autoAdvances =
+          currentQuestion.type === "single_choice" ||
+          currentQuestion.type === "image_choice" ||
+          (currentQuestion.type === "rating" && !ratingHasOther);
+        if (autoAdvances) return null;
+        return (
+          <Button
+            className={cn("mt-2 w-full", shapeClass)}
+            style={themeButtonStyle}
+            disabled={submitting || !isAnswerComplete(currentQuestion, draft) || !ready}
+            onClick={handleSubmit}
+          >
+            {submitting ? "Enviando..." : "Siguiente"}
+          </Button>
+        );
+      })()}
     </CenteredCard>
   );
 }
@@ -424,6 +452,14 @@ function asRecord(value: AnswerValue): Record<string, string | number> {
 
 function isAnswerComplete(question: RuntimeQuestion, value: AnswerValue): boolean {
   if (isEmpty(value)) return false;
+  if (question.type === "rating") {
+    if (value === "na") return true;
+    if (typeof value === "number") return Number.isFinite(value);
+    if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+      return typeof value.rating === "number" && Number.isFinite(value.rating) && value.rating !== 0;
+    }
+    return false;
+  }
   if (question.type === "multi_choice") {
     const count = Array.isArray(value) ? value.length : 0;
     if (question.minSelections != null && count < question.minSelections) return false;
@@ -443,6 +479,137 @@ function isAnswerComplete(question: RuntimeQuestion, value: AnswerValue): boolea
     return Boolean(record.best && record.worst && record.best !== record.worst);
   }
   return true;
+}
+
+function RatingInput({
+  question,
+  value,
+  onChange,
+  onSelect,
+  disabled,
+  themeColor,
+  shapeClass,
+}: {
+  question: RuntimeQuestion;
+  value: AnswerValue;
+  onChange: (value: AnswerValue) => void;
+  onSelect: (value: AnswerValue) => void;
+  disabled: boolean;
+  themeColor: string;
+  shapeClass: string;
+}) {
+  const config = parseRatingConfig(question.options);
+  const ratingValue =
+    typeof value === "number"
+      ? value
+      : typeof value === "object" &&
+          value !== null &&
+          !Array.isArray(value) &&
+          typeof value.rating === "number"
+        ? value.rating
+        : null;
+  const selectedNa = value === "na";
+  const selectedIndex =
+    ratingValue === null
+      ? -1
+      : config.levels.findIndex(
+          (level) => Number(level.value) === ratingValue || level.value === String(ratingValue),
+        );
+  const [comment, setComment] = useState(() =>
+    typeof value === "object" && value !== null && !Array.isArray(value)
+      ? String(value.other ?? "")
+      : "",
+  );
+
+  const applyRating = (next: number | "na") => {
+    if (next === "na") {
+      if (config.hasOther) onChange("na");
+      else onSelect("na");
+      return;
+    }
+    const payload: AnswerValue =
+      config.hasOther && comment.trim() ? { rating: next, other: comment.trim() } : next;
+    if (config.hasOther) onChange(payload);
+    else onSelect(payload);
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap gap-2">
+        {config.levels.map((level, index) => {
+          const numeric = Number(level.value);
+          const answerValue = Number.isFinite(numeric) ? numeric : index + 1;
+          const filled = selectedIndex >= 0 && index <= selectedIndex;
+          const active = selectedIndex === index;
+          return (
+            <button
+              key={`${level.value}-${index}`}
+              type="button"
+              disabled={disabled}
+              onClick={() => applyRating(answerValue)}
+              style={
+                active
+                  ? {
+                      backgroundColor: config.color,
+                      borderColor: config.color,
+                      color: readableTextOn(config.color),
+                    }
+                  : { color: config.color }
+              }
+              className={cn(
+                "survey-option-surface flex h-11 min-w-11 flex-1 items-center justify-center border hover:bg-muted",
+                shapeClass,
+              )}
+              aria-label={config.labelsEnabled ? level.label : `${index + 1} estrellas`}
+              title={config.labelsEnabled ? level.label : undefined}
+            >
+              <RatingShapeIcon shape={config.shape} filled={filled} className="size-5" />
+            </button>
+          );
+        })}
+        {config.hasNa ? (
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => applyRating("na")}
+            style={
+              selectedNa
+                ? {
+                    backgroundColor: themeColor,
+                    borderColor: themeColor,
+                    color: readableTextOn(themeColor),
+                  }
+                : undefined
+            }
+            className={cn(
+              "survey-option-surface flex h-11 min-w-14 items-center justify-center border px-3 text-sm font-medium hover:bg-muted",
+              shapeClass,
+            )}
+          >
+            N/A
+          </button>
+        ) : null}
+      </div>
+      {config.labelsEnabled && selectedIndex >= 0 ? (
+        <p className="text-center text-sm text-muted-foreground">
+          {config.levels[selectedIndex]?.label}
+        </p>
+      ) : null}
+      {config.hasOther ? (
+        <Input
+          value={comment}
+          disabled={disabled}
+          placeholder="Comentario (opcional)"
+          onChange={(event) => {
+            const text = event.target.value;
+            setComment(text);
+            if (ratingValue === null) return;
+            onChange(text.trim() ? { rating: ratingValue, other: text } : ratingValue);
+          }}
+        />
+      ) : null}
+    </div>
+  );
 }
 
 function QuestionInput({
@@ -540,27 +707,16 @@ function QuestionInput({
   }
 
   if (question.type === "rating") {
-    const selected = typeof value === "number" ? value : null;
     return (
-      <div className="flex gap-2">
-        {[1, 2, 3, 4, 5].map((n) => (
-          <button
-            key={n}
-            type="button"
-            disabled={disabled}
-            onClick={() => onSelect(n)}
-            style={
-              selected === n
-                ? { backgroundColor: themeColor, borderColor: themeColor, color: readableTextOn(themeColor) }
-                : undefined
-            }
-            className={cn("survey-option-surface flex h-11 flex-1 items-center justify-center border hover:bg-muted", shapeClass)}
-            aria-label={`${n} estrellas`}
-          >
-            <Star className="size-5" fill={selected !== null && n <= selected ? "currentColor" : "none"} />
-          </button>
-        ))}
-      </div>
+      <RatingInput
+        question={question}
+        value={value}
+        onChange={onChange}
+        onSelect={onSelect}
+        disabled={disabled}
+        themeColor={themeColor}
+        shapeClass={shapeClass}
+      />
     );
   }
 
