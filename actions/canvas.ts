@@ -133,65 +133,72 @@ export async function applyCanvasChanges(
 
   const questionIdMap: Record<string, string> = {};
 
-  await prisma.$transaction(async (tx) => {
-    if (toDelete.length > 0) {
-      await tx.question.deleteMany({ where: { id: { in: toDelete } } });
-    }
+  await prisma.$transaction(
+    async (tx) => {
+      if (toDelete.length > 0) {
+        await tx.question.deleteMany({ where: { id: { in: toDelete } } });
+      }
 
-    for (const q of toUpdate) {
-      await tx.question.update({
-        where: { id: q.id },
-        data: {
-          title: q.title,
-          type: q.type,
-          options: q.options ?? undefined,
-          positionX: q.positionX,
-          positionY: q.positionY,
-          required: q.required,
-          scoringEnabled: q.scoringEnabled,
-          minSelections: q.minSelections,
-          maxSelections: q.maxSelections,
-          selectionErrorMessage: q.selectionErrorMessage,
-          requiredErrorMessage: q.requiredErrorMessage,
-          randomizeOptions: q.randomizeOptions,
-        },
-      });
-    }
+      for (const q of toUpdate) {
+        await tx.question.update({
+          where: { id: q.id },
+          data: {
+            title: q.title,
+            type: q.type,
+            options: q.options ?? undefined,
+            positionX: q.positionX,
+            positionY: q.positionY,
+            required: q.required,
+            scoringEnabled: q.scoringEnabled,
+            minSelections: q.minSelections,
+            maxSelections: q.maxSelections,
+            selectionErrorMessage: q.selectionErrorMessage,
+            requiredErrorMessage: q.requiredErrorMessage,
+            randomizeOptions: q.randomizeOptions,
+          },
+        });
+      }
 
-    for (const q of toCreate) {
-      const created = await tx.question.create({
-        data: {
-          surveyId,
-          title: q.title,
-          type: q.type,
-          options: q.options ?? undefined,
-          positionX: q.positionX,
-          positionY: q.positionY,
-          isRoot: q.isRoot,
-          required: q.required,
-          scoringEnabled: q.scoringEnabled,
-          minSelections: q.minSelections,
-          maxSelections: q.maxSelections,
-          selectionErrorMessage: q.selectionErrorMessage,
-          requiredErrorMessage: q.requiredErrorMessage,
-          randomizeOptions: q.randomizeOptions,
-        },
-      });
-      questionIdMap[q.id] = created.id;
-    }
+      for (const q of toCreate) {
+        const created = await tx.question.create({
+          data: {
+            surveyId,
+            title: q.title,
+            type: q.type,
+            options: q.options ?? undefined,
+            positionX: q.positionX,
+            positionY: q.positionY,
+            isRoot: q.isRoot,
+            required: q.required,
+            scoringEnabled: q.scoringEnabled,
+            minSelections: q.minSelections,
+            maxSelections: q.maxSelections,
+            selectionErrorMessage: q.selectionErrorMessage,
+            requiredErrorMessage: q.requiredErrorMessage,
+            randomizeOptions: q.randomizeOptions,
+          },
+        });
+        questionIdMap[q.id] = created.id;
+      }
 
-    await tx.edge.deleteMany({ where: { surveyId } });
-    if (edges.length > 0) {
-      await tx.edge.createMany({
-        data: edges.map((e) => ({
-          surveyId,
-          sourceQuestionId: questionIdMap[e.sourceQuestionId] ?? e.sourceQuestionId,
-          targetQuestionId: questionIdMap[e.targetQuestionId] ?? e.targetQuestionId,
-          sourceOptionValue: e.sourceOptionValue,
-        })),
-      });
-    }
-  });
+      await tx.edge.deleteMany({ where: { surveyId } });
+      if (edges.length > 0) {
+        await tx.edge.createMany({
+          data: edges.map((e) => ({
+            surveyId,
+            sourceQuestionId: questionIdMap[e.sourceQuestionId] ?? e.sourceQuestionId,
+            targetQuestionId: questionIdMap[e.targetQuestionId] ?? e.targetQuestionId,
+            sourceOptionValue: e.sourceOptionValue,
+          })),
+        });
+      }
+    },
+    {
+      // Neon cold starts + concurrent autosaves need more than the 2s default.
+      maxWait: 15_000,
+      timeout: 30_000,
+    },
+  );
 
   revalidatePath(`/surveys/${surveyId}/questions`);
   revalidatePath(`/surveys/${surveyId}/results`);

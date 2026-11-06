@@ -334,70 +334,86 @@ export function Canvas({
     [setNodes, setEdges],
   );
 
-  /** Persist the given graph (or current refs) to Supabase/Neon. */
+  /** Serialize persists so autosave doesn't open concurrent Neon transactions. */
+  const persistQueueRef = useRef(Promise.resolve());
+
+  /** Persist the given graph (or current refs) to Neon. */
   const persistGraph = useCallback(
-    async (
+    (
       nodesList: QuestionNode[] = nodesRef.current,
       edgesList: Edge[] = edgesRef.current,
       options?: { successToast?: string },
     ) => {
-      setApplying(true);
-      try {
-        const payload = {
-          questions: nodesList.map((n) => ({
-            id: n.id,
-            title: n.data.title,
-            type: n.data.type,
-            options: n.data.options,
-            positionX: n.position.x,
-            positionY: n.position.y,
-            isRoot: n.data.isRoot,
-            required: n.data.required,
-            scoringEnabled: n.data.scoringEnabled ?? false,
-            minSelections: n.data.minSelections ?? null,
-            maxSelections: n.data.maxSelections ?? null,
-            selectionErrorMessage: n.data.selectionErrorMessage ?? null,
-            requiredErrorMessage: n.data.requiredErrorMessage ?? null,
-            randomizeOptions: n.data.randomizeOptions ?? false,
-          })),
-          edges: edgesList.map((e) => ({
-            sourceQuestionId: e.source,
-            targetQuestionId: e.target,
-            sourceOptionValue: optionValueFromHandle(e.sourceHandle),
-          })),
-        };
-        const { questionIdMap } = await applyCanvasChanges(surveyId, payload);
+      const capturedNodes = nodesList;
+      const capturedEdges = edgesList;
+      const capturedOptions = options;
 
-        let nextNodes = nodesList;
-        let nextEdges = edgesList;
-        if (Object.keys(questionIdMap).length > 0) {
-          nextNodes = nodesList.map((n) => {
-            const realId = questionIdMap[n.id];
-            if (!realId) return n;
-            return { ...n, id: realId, data: { ...n.data, questionId: realId } };
-          });
-          nextEdges = edgesList.map((e) => ({
-            ...e,
-            source: questionIdMap[e.source] ?? e.source,
-            target: questionIdMap[e.target] ?? e.target,
-          }));
+      const run = async () => {
+        setApplying(true);
+        try {
+          const payload = {
+            questions: capturedNodes.map((n) => ({
+              id: n.id,
+              title: n.data.title,
+              type: n.data.type,
+              options: n.data.options,
+              positionX: n.position.x,
+              positionY: n.position.y,
+              isRoot: n.data.isRoot,
+              required: n.data.required,
+              scoringEnabled: n.data.scoringEnabled ?? false,
+              minSelections: n.data.minSelections ?? null,
+              maxSelections: n.data.maxSelections ?? null,
+              selectionErrorMessage: n.data.selectionErrorMessage ?? null,
+              requiredErrorMessage: n.data.requiredErrorMessage ?? null,
+              randomizeOptions: n.data.randomizeOptions ?? false,
+            })),
+            edges: capturedEdges.map((e) => ({
+              sourceQuestionId: e.source,
+              targetQuestionId: e.target,
+              sourceOptionValue: optionValueFromHandle(e.sourceHandle),
+            })),
+          };
+          const { questionIdMap } = await applyCanvasChanges(surveyId, payload);
+
+          let nextNodes = capturedNodes;
+          let nextEdges = capturedEdges;
+          if (Object.keys(questionIdMap).length > 0) {
+            nextNodes = capturedNodes.map((n) => {
+              const realId = questionIdMap[n.id];
+              if (!realId) return n;
+              return { ...n, id: realId, data: { ...n.data, questionId: realId } };
+            });
+            nextEdges = capturedEdges.map((e) => ({
+              ...e,
+              source: questionIdMap[e.source] ?? e.source,
+              target: questionIdMap[e.target] ?? e.target,
+            }));
+          }
+
+          setNodes(nextNodes);
+          setEdges(nextEdges);
+          nodesRef.current = nextNodes;
+          edgesRef.current = nextEdges;
+          setDirty(false);
+          if (capturedOptions?.successToast) toast.success(capturedOptions.successToast);
+        } catch (error) {
+          setDirty(true);
+          toast.error(
+            error instanceof Error ? error.message : "No se pudieron guardar las preguntas",
+          );
+          throw error;
+        } finally {
+          setApplying(false);
         }
+      };
 
-        setNodes(nextNodes);
-        setEdges(nextEdges);
-        nodesRef.current = nextNodes;
-        edgesRef.current = nextEdges;
-        setDirty(false);
-        if (options?.successToast) toast.success(options.successToast);
-      } catch (error) {
-        setDirty(true);
-        toast.error(
-          error instanceof Error ? error.message : "No se pudieron guardar las preguntas",
-        );
-        throw error;
-      } finally {
-        setApplying(false);
-      }
+      const queued = persistQueueRef.current.then(run, run);
+      persistQueueRef.current = queued.then(
+        () => undefined,
+        () => undefined,
+      );
+      return queued;
     },
     [surveyId, setNodes, setEdges],
   );
