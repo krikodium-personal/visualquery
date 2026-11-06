@@ -106,6 +106,8 @@ model Question {
   minSelections         Int?
   maxSelections         Int?
   selectionErrorMessage String?
+  requiredErrorMessage  String?
+  randomizeOptions      Boolean      @default(false)
   createdAt             DateTime     @default(now())
   updatedAt             DateTime     @updatedAt
 

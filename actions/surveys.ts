@@ -183,6 +183,8 @@ export async function duplicateSurvey(surveyId: string): Promise<string> {
         minSelections: question.minSelections,
         maxSelections: question.maxSelections,
         selectionErrorMessage: question.selectionErrorMessage,
+        requiredErrorMessage: question.requiredErrorMessage,
+        randomizeOptions: question.randomizeOptions,
       },
     });
     idMap.set(question.id, created.id);

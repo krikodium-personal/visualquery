@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Check, Minus, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,8 @@ import type { QuestionOption } from "./QuestionNode";
 
 export type { QuestionType };
 
+export type LogicTarget = { id: string; code: string; title: string };
+
 export type QuestionFormValues = {
   title: string;
   type: QuestionType;
@@ -33,9 +35,17 @@ export type QuestionFormValues = {
   minSelections: number | null;
   maxSelections: number | null;
   selectionErrorMessage: string | null;
+  requiredErrorMessage: string | null;
+  randomizeOptions: boolean;
+  /** option value → target question id; key `__default__` = default next edge */
+  optionLogic: Record<string, string | null>;
 };
 
 type SelectionRule = "any" | "exactly" | "at_least" | "at_most";
+type EditorTab = "edit" | "options" | "logic";
+
+const OTHER_VALUE_PREFIX = "other-";
+const NONE_VALUE_PREFIX = "none-";
 
 function selectionRuleFor(values: QuestionFormValues | undefined): SelectionRule {
   if (!values) return "any";
@@ -48,7 +58,23 @@ function selectionRuleFor(values: QuestionFormValues | undefined): SelectionRule
 }
 
 function makeOption(index: number, label: string, kind?: QuestionOption["kind"]): QuestionOption {
-  return { value: `opcion-${index + 1}-${crypto.randomUUID().slice(0, 6)}`, label, kind };
+  return { value: `opcion-${index + 1}-${crypto.randomUUID().slice(2, 8)}`, label, kind };
+}
+
+function makeOtherOption(): QuestionOption {
+  return {
+    value: `${OTHER_VALUE_PREFIX}${crypto.randomUUID().slice(2, 8)}`,
+    label: "Otra (especificar)",
+    kind: "other",
+  };
+}
+
+function makeNoneOption(): QuestionOption {
+  return {
+    value: `${NONE_VALUE_PREFIX}${crypto.randomUUID().slice(2, 8)}`,
+    label: "Ninguna de las anteriores",
+    kind: "none",
+  };
 }
 
 function defaultOptions(type: QuestionType): QuestionOption[] {
@@ -93,13 +119,26 @@ function stripScoring(options: QuestionOption[]): QuestionOption[] {
   return options.map(({ isCorrect: _isCorrect, points: _points, ...rest }) => rest);
 }
 
-export function EditQuestionPanel({ open, onOpenChange, initialValues, code, onSubmit }: {
+function supportsOtherNone(type: QuestionType): boolean {
+  return type === "single_choice" || type === "multi_choice" || type === "dropdown";
+}
+
+export function EditQuestionPanel({
+  open,
+  onOpenChange,
+  initialValues,
+  code,
+  logicTargets = [],
+  onSubmit,
+}: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialValues?: QuestionFormValues;
   code?: string;
+  logicTargets?: LogicTarget[];
   onSubmit: (values: QuestionFormValues) => Promise<void>;
 }) {
+  const [tab, setTab] = useState<EditorTab>("edit");
   const [title, setTitle] = useState("");
   const [type, setType] = useState<QuestionType>("single_choice");
   const [options, setOptions] = useState<QuestionOption[]>([]);
@@ -108,6 +147,9 @@ export function EditQuestionPanel({ open, onOpenChange, initialValues, code, onS
   const [selectionRule, setSelectionRule] = useState<SelectionRule>("any");
   const [selectionCount, setSelectionCount] = useState(1);
   const [selectionErrorMessage, setSelectionErrorMessage] = useState("");
+  const [requiredErrorMessage, setRequiredErrorMessage] = useState("");
+  const [randomizeOptions, setRandomizeOptions] = useState(false);
+  const [optionLogic, setOptionLogic] = useState<Record<string, string | null>>({});
   const [saving, setSaving] = useState(false);
 
   const [wasOpen, setWasOpen] = useState(open);
@@ -115,6 +157,7 @@ export function EditQuestionPanel({ open, onOpenChange, initialValues, code, onS
     setWasOpen(open);
     if (open) {
       const nextType = initialValues?.type ?? "single_choice";
+      setTab("edit");
       setTitle(initialValues?.title ?? "");
       setType(nextType);
       setOptions(optionsForEdit(nextType, initialValues?.options));
@@ -126,13 +169,47 @@ export function EditQuestionPanel({ open, onOpenChange, initialValues, code, onS
       setSelectionRule(nextRule);
       setSelectionCount(initialValues?.minSelections ?? initialValues?.maxSelections ?? 1);
       setSelectionErrorMessage(initialValues?.selectionErrorMessage ?? "");
+      setRequiredErrorMessage(initialValues?.requiredErrorMessage ?? "");
+      setRandomizeOptions(Boolean(initialValues?.randomizeOptions));
+      setOptionLogic(initialValues?.optionLogic ?? {});
     }
   }
+
+  const regularOptions = options.filter(
+    (option) => !option.kind || option.kind === "choice",
+  );
+  const specialOptions = options.filter(
+    (option) => option.kind === "other" || option.kind === "none",
+  );
+  const editableOptions = [...regularOptions, ...specialOptions];
+  const matrixRows = options.filter((option) => option.kind === "row");
+  const matrixChoices = options.filter((option) => option.kind === "choice");
+  const hasOther = options.some((option) => option.kind === "other");
+  const hasNone = options.some((option) => option.kind === "none");
+  const canScore = SCORABLE_TYPES.includes(type);
+  const canLogic = BRANCHABLE_TYPES.includes(type);
+  const maxPoints = questionMaxPoints({
+    type,
+    options: regularOptions,
+    scoringEnabled: scoringEnabled && canScore,
+  });
+
+  const logicRows = useMemo(() => {
+    if (!canLogic) return [] as { key: string; label: string }[];
+    return [
+      ...editableOptions.map((option) => ({
+        key: option.value,
+        label: option.label || option.value,
+      })),
+      { key: "__default__", label: "Siguiente (por defecto)" },
+    ];
+  }, [canLogic, editableOptions]);
 
   const chooseType = (nextType: QuestionType) => {
     if (nextType === type) return;
     setType(nextType);
     setOptions(defaultOptions(nextType));
+    setOptionLogic({});
     if (!SCORABLE_TYPES.includes(nextType)) setScoringEnabled(false);
     if (nextType !== "multi_choice") {
       setSelectionRule("any");
@@ -142,7 +219,9 @@ export function EditQuestionPanel({ open, onOpenChange, initialValues, code, onS
   };
 
   const updateOption = (value: string, changes: Partial<QuestionOption>) => {
-    setOptions((previous) => previous.map((option) => option.value === value ? { ...option, ...changes } : option));
+    setOptions((previous) =>
+      previous.map((option) => (option.value === value ? { ...option, ...changes } : option)),
+    );
   };
 
   const toggleCorrect = (value: string) => {
@@ -164,11 +243,7 @@ export function EditQuestionPanel({ open, onOpenChange, initialValues, code, onS
       previous.map((option) => {
         if (option.value !== value) return option;
         const nextPoints = Math.max(0, (option.points ?? (option.isCorrect ? 1 : 0)) + delta);
-        return {
-          ...option,
-          points: nextPoints,
-          isCorrect: nextPoints > 0,
-        };
+        return { ...option, points: nextPoints, isCorrect: nextPoints > 0 };
       }),
     );
   };
@@ -177,46 +252,91 @@ export function EditQuestionPanel({ open, onOpenChange, initialValues, code, onS
     const parsed = Number.parseInt(raw.replace(/\D/g, ""), 10);
     const nextPoints = Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
     setOptions((previous) =>
-      previous.map((option) => {
-        if (option.value !== value) return option;
-        return {
-          ...option,
-          points: nextPoints,
-          isCorrect: nextPoints > 0,
-        };
-      }),
+      previous.map((option) =>
+        option.value === value
+          ? { ...option, points: nextPoints, isCorrect: nextPoints > 0 }
+          : option,
+      ),
     );
   };
 
   const addOption = (kind?: "row" | "choice") => {
     const base = kind === "row" ? "Fila" : "Opción";
-    setOptions((previous) => [...previous, makeOption(previous.length, `${base} ${previous.filter((item) => item.kind === kind).length + 1}`, kind)]);
+    setOptions((previous) => {
+      const specials = previous.filter((o) => o.kind === "other" || o.kind === "none");
+      const normals = previous.filter((o) => o.kind !== "other" && o.kind !== "none");
+      return [
+        ...normals,
+        makeOption(
+          normals.length,
+          `${base} ${normals.filter((item) => item.kind === kind).length + 1}`,
+          kind,
+        ),
+        ...specials,
+      ];
+    });
   };
 
-  const removeOption = (value: string) => setOptions((previous) => previous.filter((option) => option.value !== value));
+  const removeOption = (value: string) => {
+    setOptions((previous) => previous.filter((option) => option.value !== value));
+    setOptionLogic((previous) => {
+      const next = { ...previous };
+      delete next[value];
+      return next;
+    });
+  };
+
+  const setHasOther = (enabled: boolean) => {
+    setOptions((previous) => {
+      const without = previous.filter((option) => option.kind !== "other");
+      return enabled ? [...without, makeOtherOption()] : without;
+    });
+  };
+
+  const setHasNone = (enabled: boolean) => {
+    setOptions((previous) => {
+      const without = previous.filter((option) => option.kind !== "none");
+      return enabled ? [...without, makeNoneOption()] : without;
+    });
+  };
+
+  const reverseOptions = () => {
+    setOptions((previous) => {
+      const specials = previous.filter((o) => o.kind === "other" || o.kind === "none");
+      const normals = previous.filter((o) => o.kind !== "other" && o.kind !== "none");
+      return [...normals.reverse(), ...specials];
+    });
+  };
 
   const cleanOptions = () => {
-    if (!OPTION_BASED_TYPES.includes(type) && type !== "dropdown_matrix" && type !== "slider") return [];
+    if (!OPTION_BASED_TYPES.includes(type) && type !== "dropdown_matrix" && type !== "slider") {
+      return [];
+    }
     const allowScoring = scoringEnabled && SCORABLE_TYPES.includes(type);
-    return options.filter((option) => option.label.trim()).map((option) => {
-      const cleaned: QuestionOption = {
-        ...option,
-        label: option.label.trim(),
-        imageUrl: option.imageUrl?.trim() || undefined,
-      };
-      if (!allowScoring) {
-        delete cleaned.isCorrect;
-        delete cleaned.points;
+    return options
+      .filter((option) => option.label.trim() || option.kind === "other" || option.kind === "none")
+      .map((option) => {
+        const cleaned: QuestionOption = {
+          ...option,
+          label: option.label.trim() || (option.kind === "other"
+            ? "Otra (especificar)"
+            : option.kind === "none"
+              ? "Ninguna de las anteriores"
+              : option.label),
+          imageUrl: option.imageUrl?.trim() || undefined,
+        };
+        if (!allowScoring) {
+          delete cleaned.isCorrect;
+          delete cleaned.points;
+          return cleaned;
+        }
+        if (cleaned.isCorrect) cleaned.points = Math.max(1, Math.floor(cleaned.points ?? 1));
+        else {
+          cleaned.isCorrect = false;
+          cleaned.points = 0;
+        }
         return cleaned;
-      }
-      if (cleaned.isCorrect) {
-        cleaned.points = Math.max(1, Math.floor(cleaned.points ?? 1));
-      } else {
-        cleaned.isCorrect = false;
-        cleaned.points = 0;
-      }
-      return cleaned;
-    });
+      });
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -226,9 +346,18 @@ export function EditQuestionPanel({ open, onOpenChange, initialValues, code, onS
     try {
       const cleanedOptions = cleanOptions();
       const requestedCount = Number.isFinite(selectionCount) ? selectionCount : 1;
-      const normalizedCount = Math.max(1, Math.min(requestedCount, cleanedOptions.length));
+      const choiceCount = cleanedOptions.filter(
+        (o) => o.kind !== "other" && o.kind !== "none",
+      ).length;
+      const normalizedCount = Math.max(1, Math.min(requestedCount, Math.max(1, choiceCount)));
       const hasSelectionRule = type === "multi_choice" && selectionRule !== "any";
       const nextScoring = scoringEnabled && SCORABLE_TYPES.includes(type);
+      const cleanedLogic: Record<string, string | null> = {};
+      for (const [key, target] of Object.entries(optionLogic)) {
+        if (key === "__default__" || cleanedOptions.some((o) => o.value === key)) {
+          cleanedLogic[key] = target;
+        }
+      }
       await onSubmit({
         title: title.trim(),
         type,
@@ -241,6 +370,10 @@ export function EditQuestionPanel({ open, onOpenChange, initialValues, code, onS
           hasSelectionRule && selectionErrorMessage.trim()
             ? selectionErrorMessage.trim()
             : null,
+        requiredErrorMessage:
+          required && requiredErrorMessage.trim() ? requiredErrorMessage.trim() : null,
+        randomizeOptions: OPTION_BASED_TYPES.includes(type) ? randomizeOptions : false,
+        optionLogic: cleanedLogic,
       });
       onOpenChange(false);
     } finally {
@@ -248,169 +381,338 @@ export function EditQuestionPanel({ open, onOpenChange, initialValues, code, onS
     }
   };
 
-  const regularOptions = options.filter((option) => !option.kind);
-  const matrixRows = options.filter((option) => option.kind === "row");
-  const matrixChoices = options.filter((option) => option.kind === "choice");
-  const canScore = SCORABLE_TYPES.includes(type);
-  const maxPoints = questionMaxPoints({
-    type,
-    options: regularOptions,
-    scoringEnabled: scoringEnabled && canScore,
-  });
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>{initialValues ? `Editar pregunta${code ? ` ${code}` : ""}` : "Nueva pregunta"}</DialogTitle>
+          <DialogTitle>
+            {initialValues ? `Editar pregunta${code ? ` ${code}` : ""}` : "Nueva pregunta"}
+          </DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="question-title">Pregunta</Label>
-            <Input id="question-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="¿Qué querés preguntar?" autoFocus required />
-          </div>
 
-          <fieldset className="flex flex-col gap-3">
-            <legend className="mb-1 text-sm font-medium">Tipo de pregunta</legend>
-            <div className="grid gap-4 md:grid-cols-3">
-              {QUESTION_TYPE_GROUPS.map((group) => (
-                <div key={group.label} className={cn("space-y-1", group.label === "Formularios" && "md:col-span-3")}>
-                  <p className="px-2 pb-1 text-xs font-semibold text-muted-foreground">{group.label}</p>
-                  <div className={cn(group.label === "Formularios" && "md:grid md:grid-cols-3")}>
-                    {group.types.map((questionType) => (
-                      <button key={questionType} type="button" onClick={() => chooseType(questionType)} aria-pressed={type === questionType} className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-muted aria-pressed:bg-[#F5E5A7] aria-pressed:font-medium">
-                        <QuestionTypeIcon type={questionType} className="size-4 shrink-0" />
-                        <span>{QUESTION_TYPE_LABELS[questionType]}</span>
-                      </button>
+        <div className="flex gap-1 border-b">
+          {(
+            [
+              ["edit", "Editar"],
+              ["options", "Opciones"],
+              ["logic", "Lógica"],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setTab(key)}
+              className={cn(
+                "border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+                tab === key
+                  ? "border-foreground text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+          {tab === "edit" ? (
+            <>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="question-title">Pregunta</Label>
+                <Input
+                  id="question-title"
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  placeholder="¿Qué querés preguntar?"
+                  autoFocus
+                  required
+                />
+              </div>
+
+              <fieldset className="flex flex-col gap-3">
+                <legend className="mb-1 text-sm font-medium">Tipo de pregunta</legend>
+                <div className="grid gap-4 md:grid-cols-3">
+                  {QUESTION_TYPE_GROUPS.map((group) => (
+                    <div
+                      key={group.label}
+                      className={cn("space-y-1", group.label === "Formularios" && "md:col-span-3")}
+                    >
+                      <p className="px-2 pb-1 text-xs font-semibold text-muted-foreground">
+                        {group.label}
+                      </p>
+                      <div className={cn(group.label === "Formularios" && "md:grid md:grid-cols-3")}>
+                        {group.types.map((questionType) => (
+                          <button
+                            key={questionType}
+                            type="button"
+                            onClick={() => chooseType(questionType)}
+                            aria-pressed={type === questionType}
+                            className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-muted aria-pressed:bg-[#F5E5A7] aria-pressed:font-medium"
+                          >
+                            <QuestionTypeIcon type={questionType} className="size-4 shrink-0" />
+                            <span>{QUESTION_TYPE_LABELS[questionType]}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </fieldset>
+
+              {canScore && (
+                <div className="flex items-center gap-3 border-t pt-4">
+                  <input
+                    id="question-scoring"
+                    type="checkbox"
+                    checked={scoringEnabled}
+                    onChange={(event) => setScoringEnabled(event.target.checked)}
+                    className="size-4 accent-emerald-600"
+                  />
+                  <Label htmlFor="question-scoring" className="cursor-pointer font-normal">
+                    Calificar esta pregunta (habilitar el modo de test)
+                  </Label>
+                </div>
+              )}
+
+              {type === "dropdown_matrix" ? (
+                <div className="grid gap-5 border-t pt-4 sm:grid-cols-2">
+                  <OptionEditor
+                    title="Filas"
+                    options={matrixRows}
+                    onUpdate={updateOption}
+                    onRemove={removeOption}
+                    onAdd={() => addOption("row")}
+                  />
+                  <OptionEditor
+                    title="Opciones de cada menú"
+                    options={matrixChoices}
+                    onUpdate={updateOption}
+                    onRemove={removeOption}
+                    onAdd={() => addOption("choice")}
+                  />
+                </div>
+              ) : OPTION_BASED_TYPES.includes(type) ? (
+                <div className="border-t pt-4">
+                  <OptionEditor
+                    title={optionHeading(type)}
+                    options={editableOptions}
+                    imageUrls={type === "image_choice"}
+                    scoring={scoringEnabled && canScore}
+                    onUpdate={updateOption}
+                    onToggleCorrect={toggleCorrect}
+                    onAdjustPoints={adjustPoints}
+                    onSetPoints={setPoints}
+                    onRemove={removeOption}
+                    onAdd={() => addOption()}
+                  />
+                  {scoringEnabled && canScore && (
+                    <p className="mt-3 text-sm font-medium text-muted-foreground">
+                      Puntuación máxima: {pointsLabel(maxPoints)}
+                    </p>
+                  )}
+                  {supportsOtherNone(type) ? (
+                    <div className="mt-4 flex flex-col gap-2 rounded-lg border bg-muted/20 p-3">
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          className="accent-foreground"
+                          checked={hasOther}
+                          onChange={(event) => setHasOther(event.target.checked)}
+                        />
+                        Agregar opción «Otra (especificar)»
+                      </label>
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          className="accent-foreground"
+                          checked={hasNone}
+                          onChange={(event) => setHasNone(event.target.checked)}
+                        />
+                        Agregar «Ninguna de las anteriores»
+                      </label>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {type === "slider" && (
+                <div className="flex flex-col gap-3 border-t pt-4">
+                  <Label>Etiquetas de rango de escala</Label>
+                  {(
+                    [
+                      ["scale_left", "Lado izquierdo", "0"],
+                      ["scale_center", "Centro", "Ingresar una etiqueta (opcional)"],
+                      ["scale_right", "Lado derecho", "100"],
+                    ] as const
+                  ).map(([kind, label, placeholder]) => {
+                    const option = options.find((item) => item.kind === kind)!;
+                    return (
+                      <label
+                        key={kind}
+                        className="grid items-center gap-2 text-sm sm:grid-cols-[140px_1fr]"
+                      >
+                        <span>{label}</span>
+                        <Input
+                          value={option.label}
+                          onChange={(event) =>
+                            updateOption(option.value, { label: event.target.value })
+                          }
+                          placeholder={placeholder}
+                          required={kind !== "scale_center"}
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          ) : null}
+
+          {tab === "options" ? (
+            <>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="question-required">Exigir una respuesta</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Como en SurveyMonkey: el encuestado no puede continuar sin responder.
+                  </p>
+                </div>
+                <Switch id="question-required" checked={required} onCheckedChange={setRequired} />
+              </div>
+
+              {required ? (
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="required-error">Mensaje si dejan la pregunta en blanco</Label>
+                  <Textarea
+                    id="required-error"
+                    value={requiredErrorMessage}
+                    onChange={(event) => setRequiredErrorMessage(event.target.value)}
+                    placeholder="Esta pregunta es obligatoria."
+                  />
+                </div>
+              ) : null}
+
+              {OPTION_BASED_TYPES.includes(type) ? (
+                <div className="flex flex-col gap-3 border-t pt-4">
+                  <label className="flex items-center justify-between gap-3 text-sm">
+                    <span>
+                      <span className="font-medium">Ordenar opciones al azar</span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">
+                        Cada encuestado ve las opciones en un orden distinto.
+                      </span>
+                    </span>
+                    <Switch checked={randomizeOptions} onCheckedChange={setRandomizeOptions} />
+                  </label>
+                  <Button type="button" variant="outline" size="sm" onClick={reverseOptions}>
+                    Invertir orden de las opciones
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Próximamente: tamaño/diseño de la pregunta, reenviar respuestas y piping.
+                  </p>
+                </div>
+              ) : null}
+
+              {type === "multi_choice" && (
+                <div className="flex flex-col gap-4 border-t pt-4">
+                  <div className="flex flex-col gap-2">
+                    <Label htmlFor="selection-rule">
+                      Cantidad de opciones que deben responder
+                    </Label>
+                    <div className="grid gap-2 sm:grid-cols-[1fr_120px]">
+                      <select
+                        id="selection-rule"
+                        value={selectionRule}
+                        onChange={(event) =>
+                          setSelectionRule(event.target.value as SelectionRule)
+                        }
+                        className="h-9 rounded-md border bg-background px-3 text-sm"
+                      >
+                        <option value="any">Cualquier cantidad</option>
+                        <option value="exactly">Exactamente</option>
+                        <option value="at_least">Como mínimo</option>
+                        <option value="at_most">Como máximo</option>
+                      </select>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={Math.max(1, regularOptions.length)}
+                        value={selectionCount}
+                        onChange={(event) => setSelectionCount(Number(event.target.value))}
+                        disabled={selectionRule === "any"}
+                        aria-label="Cantidad de opciones"
+                      />
+                    </div>
+                  </div>
+                  {selectionRule !== "any" && (
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="selection-error-message">Mensaje de validación</Label>
+                      <Textarea
+                        id="selection-error-message"
+                        value={selectionErrorMessage}
+                        onChange={(event) => setSelectionErrorMessage(event.target.value)}
+                        placeholder="Por favor, seleccioná la cantidad indicada de opciones"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          ) : null}
+
+          {tab === "logic" ? (
+            <div className="flex flex-col gap-4">
+              {!canLogic ? (
+                <p className="rounded-lg border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">
+                  La lógica por respuesta aplica a opción múltiple, casillas, menú desplegable y
+                  elección de imagen. También podés conectar flechas en el canvas.
+                </p>
+              ) : logicTargets.length === 0 ? (
+                <p className="rounded-lg border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">
+                  Agregá más preguntas al canvas para definir saltos. Mientras tanto, usá «+» en
+                  cada opción del nodo.
+                </p>
+              ) : (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    Para cada respuesta, elegí a qué pregunta saltar (como SurveyMonkey Question
+                    Skip Logic). Dejá «Sin cambio» para no definir un salto desde acá.
+                  </p>
+                  <div className="flex flex-col gap-3">
+                    {logicRows.map((row) => (
+                      <label
+                        key={row.key}
+                        className="grid gap-1.5 rounded-lg border px-3 py-2 text-sm sm:grid-cols-[1fr_1fr] sm:items-center"
+                      >
+                        <span className="font-medium">Si responde «{row.label}»</span>
+                        <select
+                          className="h-9 rounded-md border bg-background px-2 text-sm"
+                          value={optionLogic[row.key] ?? ""}
+                          onChange={(event) =>
+                            setOptionLogic((current) => ({
+                              ...current,
+                              [row.key]: event.target.value || null,
+                            }))
+                          }
+                        >
+                          <option value="">Sin cambio / usar canvas</option>
+                          {logicTargets.map((target) => (
+                            <option key={target.id} value={target.id}>
+                              P{target.code}. {target.title || "Sin título"}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
                     ))}
                   </div>
-                </div>
-              ))}
-            </div>
-          </fieldset>
-
-          <div className="flex items-center justify-between border-t pt-4">
-            <Label htmlFor="question-required">Obligatoria</Label>
-            <Switch id="question-required" checked={required} onCheckedChange={setRequired} />
-          </div>
-
-          {canScore && (
-            <div className="flex items-center gap-3 border-t pt-4">
-              <input
-                id="question-scoring"
-                type="checkbox"
-                checked={scoringEnabled}
-                onChange={(event) => setScoringEnabled(event.target.checked)}
-                className="size-4 accent-emerald-600"
-              />
-              <Label htmlFor="question-scoring" className="cursor-pointer font-normal">
-                Calificar esta pregunta (habilitar el modo de test)
-              </Label>
-            </div>
-          )}
-
-          {type === "dropdown_matrix" ? (
-            <div className="grid gap-5 border-t pt-4 sm:grid-cols-2">
-              <OptionEditor title="Filas" options={matrixRows} onUpdate={updateOption} onRemove={removeOption} onAdd={() => addOption("row")} />
-              <OptionEditor title="Opciones de cada menú" options={matrixChoices} onUpdate={updateOption} onRemove={removeOption} onAdd={() => addOption("choice")} />
-            </div>
-          ) : OPTION_BASED_TYPES.includes(type) ? (
-            <div className="border-t pt-4">
-              <OptionEditor
-                title={optionHeading(type)}
-                options={regularOptions}
-                imageUrls={type === "image_choice"}
-                scoring={scoringEnabled && canScore}
-                onUpdate={updateOption}
-                onToggleCorrect={toggleCorrect}
-                onAdjustPoints={adjustPoints}
-                onSetPoints={setPoints}
-                onRemove={removeOption}
-                onAdd={() => addOption()}
-              />
-              {scoringEnabled && canScore && (
-                <p className="mt-3 text-sm font-medium text-muted-foreground">
-                  Puntuación máxima: {pointsLabel(maxPoints)}
-                </p>
+                </>
               )}
             </div>
           ) : null}
 
-          {type === "multi_choice" && (
-            <div className="flex flex-col gap-4 border-t pt-4">
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="selection-rule">
-                  Cantidad de opciones que deben responder los encuestados
-                </Label>
-                <div className="grid gap-2 sm:grid-cols-[1fr_120px]">
-                  <select
-                    id="selection-rule"
-                    value={selectionRule}
-                    onChange={(event) => setSelectionRule(event.target.value as SelectionRule)}
-                    className="h-9 rounded-md border bg-background px-3 text-sm"
-                  >
-                    <option value="any">Cualquier cantidad</option>
-                    <option value="exactly">Exactamente</option>
-                    <option value="at_least">Como mínimo</option>
-                    <option value="at_most">Como máximo</option>
-                  </select>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={Math.max(1, regularOptions.length)}
-                    value={selectionCount}
-                    onChange={(event) => setSelectionCount(Number(event.target.value))}
-                    disabled={selectionRule === "any"}
-                    aria-label="Cantidad de opciones"
-                  />
-                </div>
-                {selectionRule !== "any" && selectionRule !== "at_least" && (
-                  <p className="text-xs text-muted-foreground">
-                    Al llegar al máximo, las opciones restantes se deshabilitan automáticamente.
-                  </p>
-                )}
-              </div>
-
-              {selectionRule !== "any" && (
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor="selection-error-message">Mensaje de validación</Label>
-                  <Textarea
-                    id="selection-error-message"
-                    value={selectionErrorMessage}
-                    onChange={(event) => setSelectionErrorMessage(event.target.value)}
-                    placeholder="Por favor, seleccioná la cantidad indicada de opciones"
-                  />
-                </div>
-              )}
-            </div>
-          )}
-
-          {type === "slider" && (
-            <div className="flex flex-col gap-3 border-t pt-4">
-              <Label>Etiquetas de rango de escala</Label>
-              {([
-                ["scale_left", "Lado izquierdo", "0"],
-                ["scale_center", "Centro", "Ingresar una etiqueta (opcional)"],
-                ["scale_right", "Lado derecho", "100"],
-              ] as const).map(([kind, label, placeholder]) => {
-                const option = options.find((item) => item.kind === kind)!;
-                return (
-                  <label key={kind} className="grid items-center gap-2 text-sm sm:grid-cols-[140px_1fr]">
-                    <span>{label}</span>
-                    <Input
-                      value={option.label}
-                      onChange={(event) => updateOption(option.value, { label: event.target.value })}
-                      placeholder={placeholder}
-                      required={kind !== "scale_center"}
-                    />
-                  </label>
-                );
-              })}
-            </div>
-          )}
-
           <DialogFooter>
-            <Button type="submit" disabled={saving}>{saving ? "Guardando..." : "Guardar"}</Button>
+            <Button type="submit" disabled={saving}>
+              {saving ? "Guardando..." : "Guardar"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -445,10 +747,13 @@ function OptionEditor({
     <div className="flex flex-col gap-2">
       <Label>{title}</Label>
       {options.map((option, index) => {
-        const pointsValue = option.isCorrect ? Math.max(1, option.points ?? 1) : (option.points ?? 0);
+        const pointsValue = option.isCorrect
+          ? Math.max(1, option.points ?? 1)
+          : (option.points ?? 0);
+        const isSpecial = option.kind === "other" || option.kind === "none";
         return (
           <div key={option.value} className="flex flex-wrap items-start gap-2 sm:flex-nowrap">
-            {scoring && onToggleCorrect && (
+            {scoring && onToggleCorrect && !isSpecial && (
               <button
                 type="button"
                 onClick={() => onToggleCorrect(option.value)}
@@ -469,9 +774,9 @@ function OptionEditor({
                 value={option.label}
                 onChange={(event) => onUpdate(option.value, { label: event.target.value })}
                 placeholder={`Opción ${index + 1}`}
-                required
+                required={!isSpecial}
               />
-              {imageUrls && (
+              {imageUrls && !isSpecial && (
                 <ImageSourceField
                   id={`option-image-${option.value}`}
                   value={option.imageUrl}
@@ -483,7 +788,7 @@ function OptionEditor({
                 />
               )}
             </div>
-            {scoring && onAdjustPoints && onSetPoints && (
+            {scoring && onAdjustPoints && onSetPoints && !isSpecial && (
               <div className="mt-0.5 flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5">
                 <span className="px-1 text-xs font-medium text-muted-foreground">Puntos</span>
                 <Button
@@ -515,7 +820,7 @@ function OptionEditor({
                 </Button>
               </div>
             )}
-            {options.length > 1 && (
+            {(options.length > 1 || isSpecial) && (
               <Button
                 type="button"
                 size="icon-sm"

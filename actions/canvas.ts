@@ -36,7 +36,9 @@ const optionSchema = z.object({
   value: z.string().min(1),
   label: z.string().min(1),
   imageUrl: optionalOptionImage,
-  kind: z.enum(["row", "choice", "scale_left", "scale_center", "scale_right"]).optional(),
+  kind: z
+    .enum(["row", "choice", "scale_left", "scale_center", "scale_right", "other", "none"])
+    .optional(),
   isCorrect: z.boolean().optional(),
   points: z.number().int().nonnegative().optional(),
 });
@@ -54,6 +56,8 @@ const questionPayloadSchema = z.object({
   minSelections: z.number().int().positive().nullable(),
   maxSelections: z.number().int().positive().nullable(),
   selectionErrorMessage: z.string().max(500).nullable(),
+  requiredErrorMessage: z.string().max(500).nullable(),
+  randomizeOptions: z.boolean(),
 }).refine(
   (question) =>
     question.type === "multi_choice" ||
@@ -137,6 +141,8 @@ export async function applyCanvasChanges(
           minSelections: q.minSelections,
           maxSelections: q.maxSelections,
           selectionErrorMessage: q.selectionErrorMessage,
+          requiredErrorMessage: q.requiredErrorMessage,
+          randomizeOptions: q.randomizeOptions,
         },
       });
     }
@@ -156,6 +162,8 @@ export async function applyCanvasChanges(
           minSelections: q.minSelections,
           maxSelections: q.maxSelections,
           selectionErrorMessage: q.selectionErrorMessage,
+          requiredErrorMessage: q.requiredErrorMessage,
+          randomizeOptions: q.randomizeOptions,
         },
       });
       questionIdMap[q.id] = created.id;

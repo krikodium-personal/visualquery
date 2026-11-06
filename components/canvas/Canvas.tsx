@@ -89,6 +89,8 @@ export type SurveyQuestion = {
   minSelections: number | null;
   maxSelections: number | null;
   selectionErrorMessage: string | null;
+  requiredErrorMessage: string | null;
+  randomizeOptions: boolean;
 };
 
 export type SurveyEdge = {
@@ -106,6 +108,40 @@ type DialogState =
 function optionValueFromHandle(handle?: string | null): string | null {
   if (!handle || handle === "default") return null;
   return handle.replace(/^option-/, "");
+}
+
+/** Apply Logic-tab skip targets onto canvas edges (SurveyMonkey-style). */
+function applyOptionLogic(
+  edges: Edge[],
+  sourceQuestionId: string,
+  optionLogic: Record<string, string | null>,
+  options: QuestionOption[],
+): Edge[] {
+  let next = [...edges];
+  for (const [key, targetId] of Object.entries(optionLogic)) {
+    if (!targetId) continue;
+    const sourceOptionValue = key === "__default__" ? null : key;
+    if (sourceOptionValue && !options.some((option) => option.value === sourceOptionValue)) {
+      continue;
+    }
+    const sourceHandle = sourceOptionValue ? `option-${sourceOptionValue}` : "default";
+    const optionLabel = sourceOptionValue
+      ? options.find((option) => option.value === sourceOptionValue)?.label
+      : undefined;
+    next = next.filter(
+      (edge) => !(edge.source === sourceQuestionId && edge.sourceHandle === sourceHandle),
+    );
+    next.push({
+      id: `tmp_${crypto.randomUUID()}`,
+      source: sourceQuestionId,
+      target: targetId,
+      sourceHandle,
+      targetHandle: targetHandleFor(sourceOptionValue),
+      label: optionLabel,
+      ...edgeAppearance(sourceOptionValue, optionLabel),
+    });
+  }
+  return next;
 }
 
 /** Branches leave a card on the right and enter the next one on its left;
@@ -131,6 +167,8 @@ function buildInitialNodes(questions: SurveyQuestion[]): QuestionNode[] {
       minSelections: q.minSelections,
       maxSelections: q.maxSelections,
       selectionErrorMessage: q.selectionErrorMessage,
+      requiredErrorMessage: q.requiredErrorMessage,
+      randomizeOptions: q.randomizeOptions,
       onEdit: () => {},
       onDelete: () => {},
       onAddNext: () => {},
@@ -383,11 +421,13 @@ export function Canvas({
                   minSelections: values.minSelections,
                   maxSelections: values.maxSelections,
                   selectionErrorMessage: values.selectionErrorMessage,
+                  requiredErrorMessage: values.requiredErrorMessage,
+                  randomizeOptions: values.randomizeOptions,
                 },
               }
             : n,
         );
-        const newEdges = edgesRef.current
+        let newEdges = edgesRef.current
           .filter((e) => {
             if (e.source !== dialog.questionId) return true;
             const optValue = optionValueFromHandle(e.sourceHandle);
@@ -406,6 +446,12 @@ export function Canvas({
               ...edgeAppearance(sourceOptionValue, optionLabel),
             };
           });
+        newEdges = applyOptionLogic(
+          newEdges,
+          dialog.questionId,
+          values.optionLogic,
+          values.options,
+        );
         commitGraph(newNodes, newEdges);
         return;
       }
@@ -438,6 +484,8 @@ export function Canvas({
           minSelections: values.minSelections,
           maxSelections: values.maxSelections,
           selectionErrorMessage: values.selectionErrorMessage,
+          requiredErrorMessage: values.requiredErrorMessage,
+          randomizeOptions: values.randomizeOptions,
           onEdit: () => {},
           onDelete: () => {},
           onAddNext: () => {},
@@ -464,6 +512,7 @@ export function Canvas({
         newEdges = [...filtered, newEdge];
       }
 
+      newEdges = applyOptionLogic(newEdges, newId, values.optionLogic, values.options);
       commitGraph([...nodesRef.current, newNode], newEdges);
     },
     [dialog, commitGraph],
@@ -486,6 +535,8 @@ export function Canvas({
           minSelections: n.data.minSelections ?? null,
           maxSelections: n.data.maxSelections ?? null,
           selectionErrorMessage: n.data.selectionErrorMessage ?? null,
+          requiredErrorMessage: n.data.requiredErrorMessage ?? null,
+          randomizeOptions: n.data.randomizeOptions ?? false,
         })),
         edges: edgesRef.current.map((e) => ({
           sourceQuestionId: e.source,
@@ -586,9 +637,26 @@ export function Canvas({
         minSelections: editingNode.data.minSelections ?? null,
         maxSelections: editingNode.data.maxSelections ?? null,
         selectionErrorMessage: editingNode.data.selectionErrorMessage ?? null,
+        requiredErrorMessage: editingNode.data.requiredErrorMessage ?? null,
+        randomizeOptions: editingNode.data.randomizeOptions ?? false,
+        optionLogic: Object.fromEntries(
+          edges
+            .filter((edge) => edge.source === editingNode.id)
+            .map((edge) => {
+              const optionValue = optionValueFromHandle(edge.sourceHandle);
+              return [optionValue ?? "__default__", edge.target] as const;
+            }),
+        ),
       }
     : undefined;
   const editingCode = editingNode ? codes.get(editingNode.id) : undefined;
+  const logicTargets = nodes
+    .filter((n) => n.id !== editingNode?.id)
+    .map((n) => ({
+      id: n.id,
+      code: codes.get(n.id) ?? "?",
+      title: n.data.title,
+    }));
 
   // Preview always reflects the live canvas — including unsaved edits — so
   // it never touches the database (see `preview` on SurveyRunner).
@@ -604,6 +672,8 @@ export function Canvas({
         minSelections: n.data.minSelections ?? null,
         maxSelections: n.data.maxSelections ?? null,
         selectionErrorMessage: n.data.selectionErrorMessage ?? null,
+        requiredErrorMessage: n.data.requiredErrorMessage ?? null,
+        randomizeOptions: n.data.randomizeOptions ?? false,
       })),
     [nodes],
   );
@@ -681,6 +751,7 @@ export function Canvas({
         onOpenChange={(open) => !open && setDialog(null)}
         initialValues={initialValues}
         code={editingCode}
+        logicTargets={logicTargets}
         onSubmit={handleCreateSubmit}
       />
 

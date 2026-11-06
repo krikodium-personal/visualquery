@@ -56,6 +56,8 @@ type PreviewQuestion = {
   minSelections: number | null;
   maxSelections: number | null;
   selectionErrorMessage: string | null;
+  requiredErrorMessage?: string | null;
+  randomizeOptions?: boolean;
 };
 
 type FormState = SurveyDesign & { title: string; description: string | null };

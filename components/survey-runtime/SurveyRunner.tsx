@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Menu, SkipForward, Star } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -41,7 +41,23 @@ type RuntimeQuestion = {
   minSelections: number | null;
   maxSelections: number | null;
   selectionErrorMessage: string | null;
+  requiredErrorMessage?: string | null;
+  randomizeOptions?: boolean;
 };
+
+function shuffleOptions(options: QuestionOption[], seed: string): QuestionOption[] {
+  const specials = options.filter((o) => o.kind === "other" || o.kind === "none");
+  const normals = options.filter((o) => o.kind !== "other" && o.kind !== "none");
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  const copy = [...normals];
+  for (let i = copy.length - 1; i > 0; i -= 1) {
+    hash = (hash * 1664525 + 1013904223) >>> 0;
+    const j = hash % (i + 1);
+    [copy[i], copy[j]] = [copy[j]!, copy[i]!];
+  }
+  return [...copy, ...specials];
+}
 
 function initialAnswer(question: RuntimeQuestion | undefined): AnswerValue {
   if (question?.type === "slider") return 50;
@@ -99,7 +115,15 @@ export function SurveyRunner({
   const submitValue = useCallback(
     async (value: AnswerValue) => {
       if (!ready || !currentQuestion) return;
-      if (isEmpty(value)) return;
+      if (isEmpty(value)) {
+        if (currentQuestion.required) {
+          toast.error(
+            currentQuestion.requiredErrorMessage?.trim() ||
+              "Esta pregunta es obligatoria.",
+          );
+        }
+        return;
+      }
 
       setSubmitting(true);
       try {
@@ -439,6 +463,13 @@ function QuestionInput({
   shapeClass: string;
 }) {
   const selectedStyle = { borderColor: themeColor };
+  const displayOptions = useMemo(
+    () =>
+      question.randomizeOptions
+        ? shuffleOptions(question.options, question.id)
+        : question.options,
+    [question.id, question.options, question.randomizeOptions],
+  );
 
   if (question.type === "text") {
     return (
@@ -567,7 +598,7 @@ function QuestionInput({
     return (
       <select value={typeof value === "string" ? value : ""} onChange={(event) => onChange(event.target.value)} disabled={disabled} className={cn("h-10 w-full border bg-background px-3 text-sm", shapeClass)}>
         <option value="">Seleccioná una opción</option>
-        {question.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        {displayOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
       </select>
     );
   }
@@ -627,6 +658,7 @@ function QuestionInput({
 
   if (question.type === "multi_choice") {
     const selected = Array.isArray(value) ? value : [];
+    const noneOption = displayOptions.find((option) => option.kind === "none");
     const reachedMaximum =
       question.maxSelections != null && selected.length >= question.maxSelections;
     const meetsMinimum =
@@ -642,21 +674,28 @@ function QuestionInput({
     );
     return (
       <div className="flex flex-col gap-2">
-        {question.options.map((option) => {
+        {displayOptions.map((option) => {
           const checked = selected.includes(option.value);
-          const optionDisabled = disabled || (!checked && reachedMaximum);
+          const optionDisabled = disabled || (!checked && reachedMaximum && option.kind !== "none");
           return (
             <button
               key={option.value}
               type="button"
               disabled={optionDisabled}
-              onClick={() =>
+              onClick={() => {
+                if (option.kind === "none") {
+                  onChange(checked ? [] : [option.value]);
+                  return;
+                }
+                const withoutNone = noneOption
+                  ? selected.filter((v) => v !== noneOption.value)
+                  : selected;
                 onChange(
                   checked
-                    ? selected.filter((v) => v !== option.value)
-                    : [...selected, option.value],
-                )
-              }
+                    ? withoutNone.filter((v) => v !== option.value)
+                    : [...withoutNone, option.value],
+                );
+              }}
               style={checked ? selectedStyle : undefined}
               className={cn(
                 "survey-option-surface border px-3 py-2 text-left text-sm hover:bg-muted",
@@ -685,7 +724,7 @@ function QuestionInput({
     const selected = typeof value === "string" ? value : null;
     return (
       <div className="grid grid-cols-2 gap-3">
-        {question.options.map((option) => (
+        {displayOptions.map((option) => (
           <button key={option.value} type="button" disabled={disabled} onClick={() => onSelect(option.value)} style={selected === option.value ? selectedStyle : undefined} className={cn("survey-option-surface overflow-hidden border text-left hover:bg-muted", shapeClass, selected === option.value && "bg-muted")}>
             {option.imageUrl ? (
               // The survey creator controls these external image URLs.
@@ -699,11 +738,13 @@ function QuestionInput({
     );
   }
 
-  // single_choice
+  // single_choice / dropdown already handled above for dropdown
   const selected = typeof value === "string" ? value : null;
+  const otherOption = displayOptions.find((option) => option.kind === "other");
+  const otherSelected = Boolean(otherOption && selected === otherOption.value);
   return (
     <div className="flex flex-col gap-2">
-      {question.options.map((option) => (
+      {displayOptions.map((option) => (
         <button
           key={option.value}
           type="button"
@@ -719,6 +760,17 @@ function QuestionInput({
           {option.label}
         </button>
       ))}
+      {otherSelected ? (
+        <Input
+          autoFocus
+          placeholder="Especificá tu respuesta"
+          disabled={disabled}
+          className="mt-1"
+          onChange={() => {
+            /* free-text companion is display-only until we persist other text; selection still counts */
+          }}
+        />
+      ) : null}
     </div>
   );
 }

@@ -29,6 +29,8 @@ export type QuestionNodeData = {
   minSelections: number | null;
   maxSelections: number | null;
   selectionErrorMessage: string | null;
+  requiredErrorMessage: string | null;
+  randomizeOptions: boolean;
   onEdit: () => void;
   onDelete: () => void;
   onAddNext: () => void;

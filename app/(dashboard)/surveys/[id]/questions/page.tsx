@@ -42,6 +42,8 @@ export default async function SurveyQuestionsPage({
     minSelections: q.minSelections,
     maxSelections: q.maxSelections,
     selectionErrorMessage: q.selectionErrorMessage,
+    requiredErrorMessage: q.requiredErrorMessage,
+    randomizeOptions: q.randomizeOptions,
   }));
 
   const edges = survey.edges.map((e) => ({

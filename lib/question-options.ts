@@ -4,7 +4,9 @@ const optionSchema = z.object({
   value: z.string(),
   label: z.string(),
   imageUrl: z.string().optional(),
-  kind: z.enum(["row", "choice", "scale_left", "scale_center", "scale_right"]).optional(),
+  kind: z
+    .enum(["row", "choice", "scale_left", "scale_center", "scale_right", "other", "none"])
+    .optional(),
   isCorrect: z.boolean().optional(),
   points: z.number().int().nonnegative().optional(),
 });
