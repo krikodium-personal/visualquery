@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import { Check, Columns2, Eye, Filter, MoreHorizontal, X } from "lucide-react";
+import { Ban, Check, MoreHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,13 +9,19 @@ import { cn } from "@/lib/utils";
 import type { AnalysisQuestion, CompletenessFilter } from "@/lib/analysis";
 import {
   comparableQuestions,
+  compareRuleLabel,
   createCompareRule,
   createCompletenessFilterRule,
   createPeriodFilterRule,
   createQuestionFilterRule,
   createShowRule,
+  deleteParameter,
+  filterRuleLabel,
   optionLabel,
   optionValuesForQuestion,
+  parameterList,
+  showRuleLabel,
+  toggleParameter,
   type AnalysisRulesState,
   type FilterRule,
 } from "@/lib/analysis-rules";
@@ -51,6 +57,7 @@ export function AnalysisRulesPanel({
   const qaQuestion = filterable.find((q) => q.id === qaQuestionId) ?? filterable[0] ?? null;
   const compareQuestion =
     filterable.find((q) => q.id === compareQuestionId) ?? filterable[0] ?? null;
+  const items = parameterList(value);
 
   if (!open) return null;
 
@@ -80,69 +87,42 @@ export function AnalysisRulesPanel({
       rule = createPeriodFilterRule(dateFrom, dateTo);
     }
     if (!rule) return;
-    onChange({ ...value, filters: [...value.filters, rule] });
+    onChange({ ...value, filters: [rule, ...value.filters] });
     setMode("list");
   }
 
   function applyCompare() {
     if (!compareQuestion || compareValues.length < 2) return;
     const rule = createCompareRule(compareQuestion, compareValues);
-    onChange({ ...value, compare: rule });
+    // New compare starts enabled; other compares turn off (SM one active compare).
+    onChange({
+      ...value,
+      compares: [rule, ...value.compares.map((entry) => ({ ...entry, enabled: false }))],
+    });
     setMode("list");
   }
 
   function applyShow() {
     if (showQuestionIds.length === 0) return;
     const rule = createShowRule(questions, showQuestionIds);
-    onChange({ ...value, show: rule });
-    setMode("list");
-  }
-
-  function toggleFilter(id: string) {
     onChange({
       ...value,
-      filters: value.filters.map((rule) =>
-        rule.id === id ? { ...rule, enabled: !rule.enabled } : rule,
-      ),
+      shows: [rule, ...value.shows.map((entry) => ({ ...entry, enabled: false }))],
     });
-  }
-
-  function deleteFilter(id: string) {
-    onChange({ ...value, filters: value.filters.filter((rule) => rule.id !== id) });
-  }
-
-  function toggleCompare() {
-    if (!value.compare) return;
-    onChange({ ...value, compare: { ...value.compare, enabled: !value.compare.enabled } });
-  }
-
-  function deleteCompare() {
-    onChange({ ...value, compare: null });
-  }
-
-  function toggleShow() {
-    if (!value.show) return;
-    onChange({ ...value, show: { ...value.show, enabled: !value.show.enabled } });
-  }
-
-  function deleteShow() {
-    onChange({ ...value, show: null });
+    setMode("list");
   }
 
   return (
     <>
       <button
         type="button"
-        aria-label="Cerrar reglas"
+        aria-label="Cerrar parámetros"
         className="fixed inset-0 z-40 bg-black/20"
         onClick={() => onOpenChange(false)}
       />
       <aside className="fixed inset-y-0 left-0 z-50 flex w-full max-w-md flex-col border-r bg-background shadow-xl">
         <div className="flex items-center justify-between border-b px-4 py-3">
-          <div className="flex items-center gap-2">
-            <Filter className="size-4" />
-            <h2 className="font-semibold">Reglas</h2>
-          </div>
+          <h2 className="text-base font-semibold">Parámetros</h2>
           <Button
             variant="ghost"
             size="icon-sm"
@@ -156,71 +136,54 @@ export function AnalysisRulesPanel({
         {mode === "list" ? (
           <>
             <div className="flex gap-2 border-b px-4 py-3">
-              <Button size="sm" className="flex-1 gap-1" onClick={() => startMode("filter")}>
-                <Filter className="size-3.5" />
+              <Button size="sm" variant="outline" className="flex-1" onClick={() => startMode("filter")}>
                 + Filtrar
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="flex-1 gap-1"
-                onClick={() => startMode("compare")}
-              >
-                <Columns2 className="size-3.5" />
+              <Button size="sm" variant="outline" className="flex-1" onClick={() => startMode("compare")}>
                 + Comparar
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="flex-1 gap-1"
-                onClick={() => startMode("show")}
-              >
-                <Eye className="size-3.5" />
+              <Button size="sm" variant="outline" className="flex-1" onClick={() => startMode("show")}>
                 + Mostrar
               </Button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              <p className="mb-3 text-sm text-muted-foreground">
-                Como en SurveyMonkey: Filtrar reduce respuestas, Comparar cruza opciones de una
-                pregunta, Mostrar oculta el resto de preguntas.
-              </p>
-
-              {value.filters.length === 0 && !value.compare && !value.show ? (
-                <p className="rounded-lg border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">
-                  Todavía no hay reglas. Usá + Filtrar, + Comparar o + Mostrar.
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {items.length === 0 ? (
+                <p className="px-4 py-10 text-center text-sm text-muted-foreground">
+                  Creá filtros y comparaciones; quedan en esta lista para activarlos o
+                  desactivarlos. Los activos se combinan en los resultados.
                 </p>
               ) : (
-                <div className="flex flex-col gap-2">
-                  {value.filters.map((rule) => (
-                    <RuleRow
-                      key={rule.id}
-                      active={rule.enabled}
-                      label={rule.name}
-                      kind="Filtro"
-                      onToggle={() => toggleFilter(rule.id)}
-                      onDelete={() => deleteFilter(rule.id)}
-                    />
-                  ))}
-                  {value.compare ? (
-                    <RuleRow
-                      active={value.compare.enabled}
-                      label={value.compare.name}
-                      kind="Comparar"
-                      onToggle={toggleCompare}
-                      onDelete={deleteCompare}
-                    />
-                  ) : null}
-                  {value.show ? (
-                    <RuleRow
-                      active={value.show.enabled}
-                      label={value.show.name}
-                      kind="Mostrar"
-                      onToggle={toggleShow}
-                      onDelete={deleteShow}
-                    />
-                  ) : null}
-                </div>
+                <ul className="divide-y">
+                  {items.map((item) => {
+                    const kindLabel =
+                      item.type === "filter"
+                        ? "Filtrar"
+                        : item.type === "compare"
+                          ? "Comparar"
+                          : "Mostrar";
+                    const detail =
+                      item.type === "filter"
+                        ? filterRuleLabel(item.rule, questions)
+                        : item.type === "compare"
+                          ? compareRuleLabel(item.rule, questions)
+                          : showRuleLabel(item.rule, questions);
+                    return (
+                      <ParameterRow
+                        key={`${item.type}-${item.rule.id}`}
+                        active={item.rule.enabled}
+                        kindLabel={kindLabel}
+                        detail={detail}
+                        onToggle={() =>
+                          onChange(toggleParameter(value, item.type, item.rule.id))
+                        }
+                        onDelete={() =>
+                          onChange(deleteParameter(value, item.type, item.rule.id))
+                        }
+                      />
+                    );
+                  })}
+                </ul>
               )}
             </div>
 
@@ -229,10 +192,11 @@ export function AnalysisRulesPanel({
                 variant="outline"
                 className="flex-1"
                 onClick={() =>
-                  onChange({ filters: [], compare: null, show: null })
+                  onChange({ filters: [], compares: [], shows: [] })
                 }
+                disabled={items.length === 0}
               >
-                Limpiar reglas
+                Limpiar todo
               </Button>
               <Button className="flex-1" onClick={() => onOpenChange(false)}>
                 Listo
@@ -243,7 +207,7 @@ export function AnalysisRulesPanel({
 
         {mode === "filter" ? (
           <RuleComposer
-            title="Nueva regla de filtro"
+            title="Nuevo filtro"
             onBack={() => setMode("list")}
             onApply={applyFilter}
             applyDisabled={
@@ -252,7 +216,7 @@ export function AnalysisRulesPanel({
             }
           >
             <div className="flex flex-col gap-1.5">
-              <Label>Tipo de filtro</Label>
+              <Label>Tipo</Label>
               <select
                 className="h-9 rounded-md border bg-background px-2 text-sm"
                 value={filterKind}
@@ -284,8 +248,7 @@ export function AnalysisRulesPanel({
                   <p className="text-sm text-muted-foreground">No hay preguntas cerradas.</p>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  Dentro de un filtro, las opciones se combinan con O. Varios filtros se combinan
-                  con Y.
+                  Varias opciones en un filtro = O. Varios filtros activos = Y.
                 </p>
               </>
             ) : null}
@@ -329,14 +292,14 @@ export function AnalysisRulesPanel({
 
         {mode === "compare" ? (
           <RuleComposer
-            title="Nueva regla de comparación"
+            title="Nueva comparación"
             onBack={() => setMode("list")}
             onApply={applyCompare}
             applyDisabled={!compareQuestion || compareValues.length < 2}
           >
             <p className="text-sm text-muted-foreground">
-              Elegí una pregunta y al menos 2 opciones para ver el resto de resultados lado a lado
-              (como SurveyMonkey Compare).
+              Elegí una pregunta y al menos 2 opciones. Queda guardada en la lista para
+              activarla o desactivarla cuando quieras.
             </p>
             <QuestionPicker
               questions={filterable}
@@ -356,11 +319,6 @@ export function AnalysisRulesPanel({
             ) : (
               <p className="text-sm text-muted-foreground">No hay preguntas cerradas.</p>
             )}
-            {value.compare ? (
-              <p className="text-xs text-amber-700 dark:text-amber-400">
-                Al aplicar se reemplaza la comparación actual.
-              </p>
-            ) : null}
           </RuleComposer>
         ) : null}
 
@@ -372,7 +330,7 @@ export function AnalysisRulesPanel({
             applyDisabled={showQuestionIds.length === 0}
           >
             <p className="text-sm text-muted-foreground">
-              Marcá las preguntas que querés ver. El resto se oculta del resumen.
+              Marcá las preguntas visibles. También queda en la lista para activar/desactivar.
             </p>
             <div className="flex flex-col gap-1.5">
               {questions.map((question) => {
@@ -413,11 +371,6 @@ export function AnalysisRulesPanel({
                 Ninguna
               </Button>
             </div>
-            {value.show ? (
-              <p className="text-xs text-amber-700 dark:text-amber-400">
-                Solo puede haber una regla Mostrar; al aplicar se reemplaza la actual.
-              </p>
-            ) : null}
           </RuleComposer>
         ) : null}
       </aside>
@@ -425,43 +378,41 @@ export function AnalysisRulesPanel({
   );
 }
 
-function RuleRow({
+function ParameterRow({
   active,
-  label,
-  kind,
+  kindLabel,
+  detail,
   onToggle,
   onDelete,
 }: {
   active: boolean;
-  label: string;
-  kind: string;
+  kindLabel: string;
+  detail: string;
   onToggle: () => void;
   onDelete: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   return (
-    <div
-      className={cn(
-        "flex items-start gap-2 rounded-lg border px-3 py-2",
-        active ? "border-foreground/30 bg-muted/30" : "opacity-60",
-      )}
-    >
+    <li className="flex items-center gap-2 px-3 py-2.5 hover:bg-muted/30">
       <button
         type="button"
         onClick={onToggle}
-        className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border"
-        aria-label={active ? "Desactivar regla" : "Activar regla"}
-        title="Activar / desactivar"
+        className={cn(
+          "flex size-6 shrink-0 items-center justify-center rounded-full border-2",
+          active
+            ? "border-emerald-600 bg-emerald-600 text-white"
+            : "border-muted-foreground/50 text-muted-foreground",
+        )}
+        aria-label={active ? "Desactivar" : "Activar"}
+        title={active ? "Activo — clic para desactivar" : "Inactivo — clic para activar"}
       >
-        {active ? <Check className="size-3" /> : null}
+        {active ? <Check className="size-3.5 stroke-[3]" /> : <Ban className="size-3.5" />}
       </button>
-      <button type="button" onClick={onToggle} className="min-w-0 flex-1 text-left">
-        <p className="text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
-          {kind}
-        </p>
-        <p className="text-sm font-medium">{label}</p>
+      <button type="button" onClick={onToggle} className="min-w-0 flex-1 text-left text-sm">
+        <span className="font-semibold">{kindLabel}: </span>
+        <span className="text-foreground/90">{detail}</span>
       </button>
-      <div className="relative">
+      <div className="relative shrink-0">
         <Button
           variant="ghost"
           size="icon-sm"
@@ -478,7 +429,7 @@ function RuleRow({
               aria-label="Cerrar menú"
               onClick={() => setMenuOpen(false)}
             />
-            <div className="absolute right-0 z-20 mt-1 min-w-32 rounded-md border bg-background py-1 shadow-md">
+            <div className="absolute right-0 z-20 mt-1 min-w-36 rounded-md border bg-background py-1 shadow-md">
               <button
                 type="button"
                 className="block w-full px-3 py-1.5 text-left text-sm hover:bg-muted"
@@ -503,7 +454,7 @@ function RuleRow({
           </>
         ) : null}
       </div>
-    </div>
+    </li>
   );
 }
 
@@ -524,7 +475,7 @@ function RuleComposer({
     <>
       <div className="border-b px-4 py-3">
         <button type="button" className="text-sm text-muted-foreground hover:underline" onClick={onBack}>
-          ← Volver a reglas
+          ← Volver a parámetros
         </button>
         <h3 className="mt-1 font-semibold">{title}</h3>
       </div>

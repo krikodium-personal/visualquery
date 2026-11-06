@@ -43,7 +43,7 @@ export type CompareRule = {
   values: string[];
 };
 
-/** SurveyMonkey Show: only one active rule; hide all other questions. */
+/** SurveyMonkey Show: hide all questions not listed. */
 export type ShowRule = {
   id: string;
   name: string;
@@ -51,30 +51,77 @@ export type ShowRule = {
   questionIds: string[];
 };
 
+/**
+ * All parameters live as separate toggleable items (SM "Parámetros" list).
+ * Active filters AND together; one active compare drives side-by-side; one active show hides Qs.
+ */
 export type AnalysisRulesState = {
   filters: FilterRule[];
-  compare: CompareRule | null;
-  show: ShowRule | null;
+  compares: CompareRule[];
+  shows: ShowRule[];
 };
 
 export const EMPTY_RULES: AnalysisRulesState = {
   filters: [],
-  compare: null,
-  show: null,
+  compares: [],
+  shows: [],
 };
+
+export type ParameterListItem =
+  | { type: "filter"; rule: FilterRule }
+  | { type: "compare"; rule: CompareRule }
+  | { type: "show"; rule: ShowRule };
 
 function rid(prefix: string) {
   return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/** "Director/a (6), Director/a Senior (7) +1" style truncation. */
+export function truncateLabels(labels: string[], max = 2): string {
+  if (labels.length === 0) return "";
+  const head = labels.slice(0, max).join(", ");
+  const extra = labels.length - max;
+  return extra > 0 ? `${head} +${extra}` : head;
+}
+
+export function filterRuleLabel(rule: FilterRule, questions: AnalysisQuestion[]): string {
+  if (rule.kind === "completeness") {
+    return rule.completeness === "completed" ? "Solo finalizadas" : "Solo parciales";
+  }
+  if (rule.kind === "period") {
+    return `${rule.dateFrom || "…"} → ${rule.dateTo || "…"}`;
+  }
+  const question = questions.find((q) => q.id === rule.questionId);
+  const labels = rule.values.map((value) =>
+    question ? optionLabel(question, value) : value,
+  );
+  const prefix = question ? `P${question.index}` : "P?";
+  return `${prefix}: ${truncateLabels(labels)}`;
+}
+
+export function compareRuleLabel(rule: CompareRule, questions: AnalysisQuestion[]): string {
+  const question = questions.find((q) => q.id === rule.questionId);
+  const labels = rule.values.map((value) =>
+    question ? optionLabel(question, value) : value,
+  );
+  const prefix = question ? `P${question.index}` : "P?";
+  return `${prefix}: ${truncateLabels(labels)}`;
+}
+
+export function showRuleLabel(rule: ShowRule, questions: AnalysisQuestion[]): string {
+  const indexes = questions
+    .filter((q) => rule.questionIds.includes(q.id))
+    .map((q) => `P${q.index}`);
+  return truncateLabels(indexes, 4) || `${rule.questionIds.length} preguntas`;
 }
 
 export function createQuestionFilterRule(
   question: AnalysisQuestion,
   values: string[],
 ): FilterRule {
-  const labels = values.map((value) => optionLabel(question, value));
   return {
     id: rid("f"),
-    name: `P${question.index}: ${labels.slice(0, 2).join(", ")}${labels.length > 2 ? "…" : ""}`,
+    name: `P${question.index}: ${truncateLabels(values.map((v) => optionLabel(question, v)))}`,
     enabled: true,
     kind: "question_answer",
     questionId: question.id,
@@ -97,7 +144,7 @@ export function createCompletenessFilterRule(
 export function createPeriodFilterRule(dateFrom: string, dateTo: string): FilterRule {
   return {
     id: rid("f"),
-    name: `Periodo: ${dateFrom || "…"} → ${dateTo || "…"}`,
+    name: `${dateFrom || "…"} → ${dateTo || "…"}`,
     enabled: true,
     kind: "period",
     dateFrom,
@@ -106,10 +153,9 @@ export function createPeriodFilterRule(dateFrom: string, dateTo: string): Filter
 }
 
 export function createCompareRule(question: AnalysisQuestion, values: string[]): CompareRule {
-  const labels = values.map((value) => optionLabel(question, value));
   return {
     id: rid("c"),
-    name: `Comparar P${question.index}: ${labels.slice(0, 3).join(", ")}${labels.length > 3 ? "…" : ""}`,
+    name: `P${question.index}: ${truncateLabels(values.map((v) => optionLabel(question, v)))}`,
     enabled: true,
     questionId: question.id,
     values,
@@ -122,7 +168,7 @@ export function createShowRule(questions: AnalysisQuestion[], questionIds: strin
     .map((q) => `P${q.index}`);
   return {
     id: rid("s"),
-    name: `Mostrar: ${indexes.slice(0, 4).join(", ")}${indexes.length > 4 ? "…" : ""}`,
+    name: truncateLabels(indexes, 4),
     enabled: true,
     questionIds,
   };
@@ -144,7 +190,25 @@ export function optionValuesForQuestion(question: AnalysisQuestion): string[] {
   return question.options.map((o) => o.value);
 }
 
-/** Merge discrete SM filter rules into the legacy filter state (AND across rules). */
+/** Flat Parámetros list: compares first (as in SM), then filters, then show. */
+export function parameterList(state: AnalysisRulesState): ParameterListItem[] {
+  return [
+    ...state.compares.map((rule) => ({ type: "compare" as const, rule })),
+    ...state.filters.map((rule) => ({ type: "filter" as const, rule })),
+    ...state.shows.map((rule) => ({ type: "show" as const, rule })),
+  ];
+}
+
+/** Active compare used for side-by-side (first enabled with ≥2 values). */
+export function activeCompare(state: AnalysisRulesState): CompareRule | null {
+  return state.compares.find((rule) => rule.enabled && rule.values.length >= 2) ?? null;
+}
+
+export function activeShow(state: AnalysisRulesState): ShowRule | null {
+  return state.shows.find((rule) => rule.enabled && rule.questionIds.length > 0) ?? null;
+}
+
+/** Merge discrete SM filter rules into filter state (AND across rules). */
 export function rulesToFilterState(rules: FilterRule[]): AnalysisFilterState {
   const enabled = rules.filter((r) => r.enabled);
   let completeness: CompletenessFilter = "all";
@@ -202,25 +266,98 @@ export function visibleQuestions(
 }
 
 export function countActiveRules(state: AnalysisRulesState): number {
-  const filters = state.filters.filter((r) => r.enabled).length;
-  const compare = state.compare?.enabled ? 1 : 0;
-  const show = state.show?.enabled ? 1 : 0;
-  return filters + compare + show;
+  return (
+    state.filters.filter((r) => r.enabled).length +
+    state.compares.filter((r) => r.enabled).length +
+    state.shows.filter((r) => r.enabled).length
+  );
 }
 
 export function activeRuleChips(
   state: AnalysisRulesState,
+  questions: AnalysisQuestion[],
 ): { id: string; kind: "filter" | "compare" | "show"; label: string }[] {
   const chips: { id: string; kind: "filter" | "compare" | "show"; label: string }[] = [];
+  for (const rule of state.compares) {
+    if (!rule.enabled) continue;
+    chips.push({
+      id: rule.id,
+      kind: "compare",
+      label: `Comparar: ${compareRuleLabel(rule, questions)}`,
+    });
+  }
   for (const rule of state.filters) {
     if (!rule.enabled) continue;
-    chips.push({ id: rule.id, kind: "filter", label: rule.name });
+    chips.push({
+      id: rule.id,
+      kind: "filter",
+      label: `Filtrar: ${filterRuleLabel(rule, questions)}`,
+    });
   }
-  if (state.compare?.enabled) {
-    chips.push({ id: state.compare.id, kind: "compare", label: state.compare.name });
-  }
-  if (state.show?.enabled) {
-    chips.push({ id: state.show.id, kind: "show", label: state.show.name });
+  for (const rule of state.shows) {
+    if (!rule.enabled) continue;
+    chips.push({
+      id: rule.id,
+      kind: "show",
+      label: `Mostrar: ${showRuleLabel(rule, questions)}`,
+    });
   }
   return chips;
+}
+
+/**
+ * Toggle a parameter. Enabling a compare disables other compares (SM: one compare
+ * drives the crosstab). Enabling a show disables other shows. Filters stay independent.
+ */
+export function toggleParameter(
+  state: AnalysisRulesState,
+  kind: "filter" | "compare" | "show",
+  id: string,
+): AnalysisRulesState {
+  if (kind === "filter") {
+    return {
+      ...state,
+      filters: state.filters.map((rule) =>
+        rule.id === id ? { ...rule, enabled: !rule.enabled } : rule,
+      ),
+    };
+  }
+  if (kind === "compare") {
+    const target = state.compares.find((rule) => rule.id === id);
+    if (!target) return state;
+    const turningOn = !target.enabled;
+    return {
+      ...state,
+      compares: state.compares.map((rule) => {
+        if (rule.id === id) return { ...rule, enabled: turningOn };
+        if (turningOn) return { ...rule, enabled: false };
+        return rule;
+      }),
+    };
+  }
+  const target = state.shows.find((rule) => rule.id === id);
+  if (!target) return state;
+  const turningOn = !target.enabled;
+  return {
+    ...state,
+    shows: state.shows.map((rule) => {
+      if (rule.id === id) return { ...rule, enabled: turningOn };
+      if (turningOn) return { ...rule, enabled: false };
+      return rule;
+    }),
+  };
+}
+
+export function deleteParameter(
+  state: AnalysisRulesState,
+  kind: "filter" | "compare" | "show",
+  id: string,
+): AnalysisRulesState {
+  if (kind === "filter") {
+    return { ...state, filters: state.filters.filter((rule) => rule.id !== id) };
+  }
+  if (kind === "compare") {
+    return { ...state, compares: state.compares.filter((rule) => rule.id !== id) };
+  }
+  return { ...state, shows: state.shows.filter((rule) => rule.id !== id) };
 }

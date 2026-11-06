@@ -37,23 +37,23 @@ const analysisViewSchema = z.object({
   name: z.string().min(1).max(80),
   rules: z.object({
     filters: z.array(filterRuleSchema),
-    compare: z
-      .object({
+    compares: z.array(
+      z.object({
         id: z.string(),
         name: z.string(),
         enabled: z.boolean(),
         questionId: z.string(),
         values: z.array(z.string()),
-      })
-      .nullable(),
-    show: z
-      .object({
+      }),
+    ),
+    shows: z.array(
+      z.object({
         id: z.string(),
         name: z.string(),
         enabled: z.boolean(),
         questionIds: z.array(z.string()),
-      })
-      .nullable(),
+      }),
+    ),
   }),
   createdAt: z.string(),
 });

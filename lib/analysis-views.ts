@@ -50,6 +50,13 @@ const showRuleSchema = z.object({
 
 const rulesStateSchema = z.object({
   filters: z.array(filterRuleSchema),
+  compares: z.array(compareRuleSchema),
+  shows: z.array(showRuleSchema),
+});
+
+/** Previous singular compare/show shape. */
+const rulesStateV1Schema = z.object({
+  filters: z.array(filterRuleSchema),
   compare: compareRuleSchema.nullable(),
   show: showRuleSchema.nullable(),
 });
@@ -61,7 +68,13 @@ const analysisViewSchema = z.object({
   createdAt: z.string(),
 });
 
-/** Legacy wave-2 shape — accepted on read, converted to rules. */
+const analysisViewV1Schema = z.object({
+  id: z.string(),
+  name: z.string(),
+  rules: rulesStateV1Schema,
+  createdAt: z.string(),
+});
+
 const legacyViewSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -88,6 +101,20 @@ export function parseAnalysisViews(value: unknown): AnalysisView[] {
       views.push(modern.data);
       continue;
     }
+    const v1 = analysisViewV1Schema.safeParse(entry);
+    if (v1.success) {
+      views.push({
+        id: v1.data.id,
+        name: v1.data.name,
+        createdAt: v1.data.createdAt,
+        rules: {
+          filters: v1.data.rules.filters,
+          compares: v1.data.rules.compare ? [v1.data.rules.compare] : [],
+          shows: v1.data.rules.show ? [v1.data.rules.show] : [],
+        },
+      });
+      continue;
+    }
     const legacy = legacyViewSchema.safeParse(entry);
     if (legacy.success) {
       views.push(legacyToView(legacy.data));
@@ -110,7 +137,7 @@ function legacyToView(legacy: z.infer<typeof legacyViewSchema>): AnalysisView {
   if (legacy.filters.dateFrom || legacy.filters.dateTo) {
     filters.push({
       id: `f_legacy_${legacy.id}_p`,
-      name: `Periodo: ${legacy.filters.dateFrom || "…"} → ${legacy.filters.dateTo || "…"}`,
+      name: `${legacy.filters.dateFrom || "…"} → ${legacy.filters.dateTo || "…"}`,
       enabled: true,
       kind: "period",
       dateFrom: legacy.filters.dateFrom,
@@ -121,7 +148,7 @@ function legacyToView(legacy: z.infer<typeof legacyViewSchema>): AnalysisView {
     if (qf.values.length === 0) continue;
     filters.push({
       id: `f_legacy_${legacy.id}_q${index}`,
-      name: `Filtro pregunta`,
+      name: "Filtro pregunta",
       enabled: true,
       kind: "question_answer",
       questionId: qf.questionId,
@@ -131,7 +158,7 @@ function legacyToView(legacy: z.infer<typeof legacyViewSchema>): AnalysisView {
   return {
     id: legacy.id,
     name: legacy.name,
-    rules: { filters, compare: null, show: null },
+    rules: { filters, compares: [], shows: [] },
     createdAt: legacy.createdAt,
   };
 }

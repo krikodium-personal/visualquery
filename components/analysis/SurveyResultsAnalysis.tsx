@@ -15,9 +15,12 @@ import { ResponseFlowChart } from "@/components/analysis/ResponseFlowChart";
 import { buildResponsesCsv, downloadCsv } from "@/lib/export-csv";
 import type { AnalysisPayload } from "@/lib/analysis";
 import {
+  activeCompare,
   activeRuleChips,
+  activeShow,
   applyFilterRules,
   countActiveRules,
+  deleteParameter,
   EMPTY_RULES,
   visibleQuestions,
   type AnalysisRulesState,
@@ -44,19 +47,22 @@ export function SurveyResultsAnalysis({
     [data.responses, rules.filters],
   );
 
+  const compare = activeCompare(rules);
+  const show = activeShow(rules);
+
   const questionsShown = useMemo(
-    () => visibleQuestions(data.questions, rules.show),
-    [data.questions, rules.show],
+    () => visibleQuestions(data.questions, show),
+    [data.questions, show],
   );
 
   const activeCount = countActiveRules(rules);
-  const chips = activeRuleChips(rules);
+  const chips = activeRuleChips(rules, data.questions);
   const totalResponses = data.responses.length;
   const filteredCount = filteredResponses.length;
   const completedResponses = filteredResponses.filter((r) => r.completedAt).length;
   const completionRate =
     filteredCount === 0 ? 0 : Math.round((completedResponses / filteredCount) * 100);
-  const compareOn = Boolean(rules.compare?.enabled && rules.compare.values.length >= 2);
+  const compareOn = Boolean(compare);
 
   function clearRules() {
     setRules(structuredClone(EMPTY_RULES));
@@ -66,13 +72,7 @@ export function SurveyResultsAnalysis({
 
   function removeChip(id: string, kind: "filter" | "compare" | "show") {
     setActiveViewId(null);
-    setRules((current) => {
-      if (kind === "filter") {
-        return { ...current, filters: current.filters.filter((rule) => rule.id !== id) };
-      }
-      if (kind === "compare") return { ...current, compare: null };
-      return { ...current, show: null };
-    });
+    setRules((current) => deleteParameter(current, kind, id));
     if (kind === "compare" && tab === "compare") setTab("summary");
   }
 
@@ -90,18 +90,15 @@ export function SurveyResultsAnalysis({
   function applyView(view: AnalysisView) {
     setRules(structuredClone(view.rules));
     setActiveViewId(view.id);
-    if (view.rules.compare?.enabled) setTab("compare");
+    if (activeCompare(view.rules)) setTab("compare");
     else if (tab === "compare") setTab("summary");
   }
 
   function updateRules(next: AnalysisRulesState) {
     setActiveViewId(null);
     setRules(next);
-    if (next.compare?.enabled && next.compare.values.length >= 2) {
-      setTab("compare");
-    } else if (tab === "compare") {
-      setTab("summary");
-    }
+    if (activeCompare(next)) setTab("compare");
+    else if (tab === "compare") setTab("summary");
   }
 
   return (
@@ -122,7 +119,7 @@ export function SurveyResultsAnalysis({
             className="gap-1.5"
           >
             <Filter className="size-4" />
-            Reglas
+            Parámetros
             {activeCount > 0 ? (
               <Badge variant="secondary" className="ml-0.5 bg-background/20 text-current">
                 {activeCount}
@@ -171,8 +168,8 @@ export function SurveyResultsAnalysis({
       {activeCount > 0 ? (
         <div className="rounded-xl border bg-muted/30 px-4 py-3">
           <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-            Reglas activas · {filteredCount} de {totalResponses} encuestados
-            {rules.show?.enabled
+            Parámetros activos · {filteredCount} de {totalResponses} encuestados
+            {show
               ? ` · ${questionsShown.length} de ${data.questions.length} preguntas`
               : ""}
           </p>
@@ -183,14 +180,14 @@ export function SurveyResultsAnalysis({
                 type="button"
                 onClick={() => removeChip(chip.id, chip.kind)}
                 className="inline-flex max-w-full items-center gap-1.5 rounded-full border bg-background px-2.5 py-1 text-xs hover:bg-muted"
-                title="Quitar regla"
+                title="Quitar parámetro"
               >
                 <span className="truncate">{chip.label}</span>
                 <X className="size-3 shrink-0 opacity-60" />
               </button>
             ))}
             <Button variant="ghost" size="xs" onClick={clearRules}>
-              Limpiar reglas
+              Limpiar parámetros
             </Button>
           </div>
         </div>
@@ -251,12 +248,12 @@ export function SurveyResultsAnalysis({
           />
         </TabsContent>
 
-        {compareOn && rules.compare ? (
+        {compare ? (
           <TabsContent value="compare" className="mt-4">
             <CompareResults
               questions={questionsShown}
               responses={filteredResponses}
-              compare={rules.compare}
+              compare={compare}
             />
           </TabsContent>
         ) : null}
