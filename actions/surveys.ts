@@ -87,3 +87,45 @@ export async function renameSurvey(surveyId: string, title: string) {
   revalidatePath("/dashboard");
   revalidatePath(`/surveys/${surveyId}/questions`);
 }
+
+const collectorOptionsSchema = z.object({
+  accessPassword: z.string().max(200).nullable(),
+  responseLimit: z.number().int().positive().max(1_000_000).nullable(),
+  cutoffAt: z.string().datetime().nullable(),
+});
+
+/** SurveyMonkey-style web-link collector options. */
+export async function updateCollectorOptions(
+  surveyId: string,
+  input: {
+    accessPassword: string | null;
+    responseLimit: number | null;
+    cutoffAt: string | null;
+  },
+) {
+  const ownerId = await requireUserId();
+  const cutoffRaw = input.cutoffAt?.trim() || null;
+  const parsed = collectorOptionsSchema.parse({
+    accessPassword: input.accessPassword?.trim() ? input.accessPassword.trim() : null,
+    responseLimit: input.responseLimit,
+    cutoffAt: cutoffRaw,
+  });
+
+  const survey = await prisma.survey.findFirst({
+    where: { id: surveyId, ownerId },
+    select: { slug: true },
+  });
+  if (!survey) throw new Error("Encuesta no encontrada");
+
+  await prisma.survey.update({
+    where: { id: surveyId, ownerId },
+    data: {
+      accessPassword: parsed.accessPassword,
+      responseLimit: parsed.responseLimit,
+      cutoffAt: parsed.cutoffAt ? new Date(parsed.cutoffAt) : null,
+    },
+  });
+
+  revalidatePath(`/surveys/${surveyId}/publish`);
+  revalidatePath(`/s/${survey.slug}`);
+}

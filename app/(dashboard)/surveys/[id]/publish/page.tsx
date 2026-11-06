@@ -18,13 +18,15 @@ export default async function SurveyPublishPage({
       id: true,
       slug: true,
       status: true,
+      accessPassword: true,
+      responseLimit: true,
+      cutoffAt: true,
       _count: { select: { questions: true } },
     },
   });
 
   if (!survey) notFound();
 
-  // Building the link server-side keeps it right on first paint.
   const headerList = await headers();
   const host = headerList.get("host") ?? "localhost:3000";
   const proto = headerList.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
@@ -37,6 +39,9 @@ export default async function SurveyPublishPage({
         status={survey.status}
         questionCount={survey._count.questions}
         publicUrl={`${proto}://${host}/s/${survey.slug}`}
+        accessPassword={survey.accessPassword}
+        responseLimit={survey.responseLimit}
+        cutoffAt={survey.cutoffAt?.toISOString() ?? null}
       />
     </div>
   );

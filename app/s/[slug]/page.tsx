@@ -12,6 +12,7 @@ import {
   parseThemePreset,
 } from "@/lib/survey-design";
 import { SurveyRunner } from "@/components/survey-runtime/SurveyRunner";
+import { SurveyPasswordGate } from "@/components/surveys/SurveyPasswordGate";
 
 export default async function PublicSurveyPage({
   params,
@@ -22,7 +23,11 @@ export default async function PublicSurveyPage({
 
   const survey = await prisma.survey.findFirst({
     where: { slug, status: { in: ["published", "closed"] } },
-    include: { questions: true, edges: true },
+    include: {
+      questions: true,
+      edges: true,
+      _count: { select: { responses: true } },
+    },
   });
 
   if (!survey) notFound();
@@ -32,6 +37,23 @@ export default async function PublicSurveyPage({
       <main className="flex min-h-svh flex-col items-center justify-center gap-3 p-6 text-center">
         <h1 className="text-2xl font-semibold">{survey.title}</h1>
         <p className="text-muted-foreground">Esta encuesta está cerrada y ya no acepta respuestas.</p>
+      </main>
+    );
+  }
+
+  const pastCutoff = survey.cutoffAt !== null && survey.cutoffAt.getTime() <= Date.now();
+  const atLimit =
+    survey.responseLimit !== null && survey._count.responses >= survey.responseLimit;
+
+  if (pastCutoff || atLimit) {
+    return (
+      <main className="flex min-h-svh flex-col items-center justify-center gap-3 p-6 text-center">
+        <h1 className="text-2xl font-semibold">{survey.title}</h1>
+        <p className="text-muted-foreground">
+          {pastCutoff
+            ? "Esta encuesta ya alcanzó su fecha de cierre."
+            : "Esta encuesta alcanzó el límite de respuestas."}
+        </p>
       </main>
     );
   }
@@ -57,37 +79,43 @@ export default async function PublicSurveyPage({
   const rootQuestion = survey.questions.find((q) => q.isRoot) ?? survey.questions[0] ?? null;
 
   return (
-    <div className="flex min-h-svh flex-col">
-      <SurveyRunner
-        surveyId={survey.id}
-        title={survey.title}
-        description={survey.description}
-        questions={questions}
-        edges={edges}
-        rootQuestionId={rootQuestion?.id ?? null}
-        design={{
-          themePreset: parseThemePreset(survey.themePreset),
-          themeColor: survey.themeColor,
-          backgroundColor: survey.backgroundColor,
-          colorMode: parseColorMode(survey.colorMode),
-          backgroundImageUrl: survey.backgroundImageUrl,
-          backgroundImageScope: parseBackgroundImageScope(survey.backgroundImageScope),
-          fontFamily: parseFontFamily(survey.fontFamily),
-          buttonShape: parseButtonShape(survey.buttonShape),
-          surfaceStyle: parseSurfaceStyle(survey.surfaceStyle),
-          logoUrl: survey.logoUrl,
-          logoSize: survey.logoSize,
-          logoPosition: parseLogoPosition(survey.logoPosition),
-          showProgress: survey.showProgress,
-          progressDisplay: parseProgressDisplay(survey.progressDisplay),
-          welcomeEnabled: survey.welcomeEnabled,
-          welcomeTitle: survey.welcomeTitle,
-          welcomeText: survey.welcomeText,
-          welcomeButtonLabel: survey.welcomeButtonLabel,
-          thankYouTitle: survey.thankYouTitle,
-          thankYouText: survey.thankYouText,
-        }}
-      />
-    </div>
+    <SurveyPasswordGate
+      surveyId={survey.id}
+      accessPassword={survey.accessPassword}
+      title={survey.title}
+    >
+      <div className="flex min-h-svh flex-col">
+        <SurveyRunner
+          surveyId={survey.id}
+          title={survey.title}
+          description={survey.description}
+          questions={questions}
+          edges={edges}
+          rootQuestionId={rootQuestion?.id ?? null}
+          design={{
+            themePreset: parseThemePreset(survey.themePreset),
+            themeColor: survey.themeColor,
+            backgroundColor: survey.backgroundColor,
+            colorMode: parseColorMode(survey.colorMode),
+            backgroundImageUrl: survey.backgroundImageUrl,
+            backgroundImageScope: parseBackgroundImageScope(survey.backgroundImageScope),
+            fontFamily: parseFontFamily(survey.fontFamily),
+            buttonShape: parseButtonShape(survey.buttonShape),
+            surfaceStyle: parseSurfaceStyle(survey.surfaceStyle),
+            logoUrl: survey.logoUrl,
+            logoSize: survey.logoSize,
+            logoPosition: parseLogoPosition(survey.logoPosition),
+            showProgress: survey.showProgress,
+            progressDisplay: parseProgressDisplay(survey.progressDisplay),
+            welcomeEnabled: survey.welcomeEnabled,
+            welcomeTitle: survey.welcomeTitle,
+            welcomeText: survey.welcomeText,
+            welcomeButtonLabel: survey.welcomeButtonLabel,
+            thankYouTitle: survey.thankYouTitle,
+            thankYouText: survey.thankYouText,
+          }}
+        />
+      </div>
+    </SurveyPasswordGate>
   );
 }

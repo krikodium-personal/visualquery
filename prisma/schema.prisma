@@ -57,6 +57,11 @@ model Survey {
   thankYouTitle String?
   thankYouText  String?
 
+  // Collector options (web link) — SurveyMonkey-style access controls.
+  accessPassword String?
+  responseLimit  Int?
+  cutoffAt       DateTime?
+
   questions Question[]
   edges     Edge[]
   responses Response[]

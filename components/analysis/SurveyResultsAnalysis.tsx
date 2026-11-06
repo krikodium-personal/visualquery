@@ -1,14 +1,16 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Filter, GitBranch, ListTree, X } from "lucide-react";
+import { Download, Filter, GitBranch, ListTree, Users, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AnalysisFilterPanel } from "@/components/analysis/AnalysisFilterPanel";
+import { IndividualResponses } from "@/components/analysis/IndividualResponses";
 import { QuestionResultCard } from "@/components/analysis/QuestionResultCard";
 import { ResponseFlowChart } from "@/components/analysis/ResponseFlowChart";
+import { buildResponsesCsv, downloadCsv } from "@/lib/export-csv";
 import {
   countActiveFilters,
   EMPTY_FILTERS,
@@ -60,6 +62,17 @@ export function SurveyResultsAnalysis({ data }: { data: AnalysisPayload }) {
     }
   }
 
+  function exportCsv() {
+    const csv = buildResponsesCsv(data.questions, filteredResponses);
+    const slug = data.surveyTitle
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "");
+    downloadCsv(`${slug || "encuesta"}-respuestas.csv`, csv);
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -67,19 +80,25 @@ export function SurveyResultsAnalysis({ data }: { data: AnalysisPayload }) {
           <h2 className="text-lg font-semibold">Análisis</h2>
           <p className="text-sm text-muted-foreground">{data.surveyTitle}</p>
         </div>
-        <Button
-          variant={activeFilterCount > 0 ? "default" : "outline"}
-          onClick={() => setPanelOpen(true)}
-          className="gap-1.5"
-        >
-          <Filter className="size-4" />
-          Parámetros
-          {activeFilterCount > 0 ? (
-            <Badge variant="secondary" className="ml-0.5 bg-background/20 text-current">
-              {activeFilterCount}
-            </Badge>
-          ) : null}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" className="gap-1.5" onClick={exportCsv}>
+            <Download className="size-4" />
+            Exportar CSV
+          </Button>
+          <Button
+            variant={activeFilterCount > 0 ? "default" : "outline"}
+            onClick={() => setPanelOpen(true)}
+            className="gap-1.5"
+          >
+            <Filter className="size-4" />
+            Parámetros
+            {activeFilterCount > 0 ? (
+              <Badge variant="secondary" className="ml-0.5 bg-background/20 text-current">
+                {activeFilterCount}
+              </Badge>
+            ) : null}
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
@@ -140,6 +159,10 @@ export function SurveyResultsAnalysis({ data }: { data: AnalysisPayload }) {
             <ListTree className="size-3.5" />
             Resumen por pregunta
           </TabsTrigger>
+          <TabsTrigger value="individual" className="gap-1.5 px-3">
+            <Users className="size-3.5" />
+            Respuestas individuales
+          </TabsTrigger>
           <TabsTrigger value="flow" className="gap-1.5 px-3">
             <GitBranch className="size-3.5" />
             Flujo
@@ -164,6 +187,10 @@ export function SurveyResultsAnalysis({ data }: { data: AnalysisPayload }) {
               ))}
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="individual" className="mt-4">
+          <IndividualResponses questions={data.questions} responses={filteredResponses} />
         </TabsContent>
 
         <TabsContent value="flow" className="mt-4">

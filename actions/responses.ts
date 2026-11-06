@@ -3,13 +3,30 @@
 import { prisma } from "@/lib/prisma";
 import type { AnswerValue } from "@/lib/flow-engine";
 
-export async function startResponse(surveyId: string): Promise<string> {
+async function assertSurveyAcceptingResponses(surveyId: string) {
   const survey = await prisma.survey.findFirst({
     where: { id: surveyId, status: "published" },
-    select: { id: true },
+    select: {
+      id: true,
+      responseLimit: true,
+      cutoffAt: true,
+      _count: { select: { responses: true } },
+    },
   });
   if (!survey) throw new Error("Encuesta no disponible");
 
+  if (survey.cutoffAt && survey.cutoffAt.getTime() <= Date.now()) {
+    throw new Error("Esta encuesta ya alcanzó su fecha de cierre");
+  }
+  if (survey.responseLimit !== null && survey._count.responses >= survey.responseLimit) {
+    throw new Error("Esta encuesta alcanzó el límite de respuestas");
+  }
+
+  return survey;
+}
+
+export async function startResponse(surveyId: string): Promise<string> {
+  await assertSurveyAcceptingResponses(surveyId);
   const response = await prisma.response.create({ data: { surveyId } });
   return response.id;
 }
