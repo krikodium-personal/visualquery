@@ -20,7 +20,9 @@ import { ImageSourceField } from "@/components/ui/image-source-field";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -527,35 +529,39 @@ export function EditQuestionPanel({
                 />
               </div>
 
-              <fieldset className="flex flex-col gap-3">
-                <legend className="mb-1 text-sm font-medium">Tipo de pregunta</legend>
-                <div className="grid gap-4 md:grid-cols-3">
-                  {QUESTION_TYPE_GROUPS.map((group) => (
-                    <div
-                      key={group.label}
-                      className={cn("space-y-1", group.label === "Formularios" && "md:col-span-3")}
-                    >
-                      <p className="px-2 pb-1 text-xs font-semibold text-muted-foreground">
-                        {group.label}
-                      </p>
-                      <div className={cn(group.label === "Formularios" && "md:grid md:grid-cols-3")}>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="question-type">Tipo de pregunta</Label>
+                <Select
+                  value={type}
+                  onValueChange={(value) => chooseType(value as QuestionType)}
+                >
+                  <SelectTrigger id="question-type" className="w-full">
+                    <SelectValue>
+                      {() => (
+                        <span className="flex items-center gap-2">
+                          <QuestionTypeIcon type={type} className="size-4 shrink-0" />
+                          {QUESTION_TYPE_LABELS[type]}
+                        </span>
+                      )}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent className="max-h-80">
+                    {QUESTION_TYPE_GROUPS.map((group) => (
+                      <SelectGroup key={group.label}>
+                        <SelectLabel>{group.label}</SelectLabel>
                         {group.types.map((questionType) => (
-                          <button
-                            key={questionType}
-                            type="button"
-                            onClick={() => chooseType(questionType)}
-                            aria-pressed={type === questionType}
-                            className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-muted aria-pressed:bg-[#F5E5A7] aria-pressed:font-medium"
-                          >
-                            <QuestionTypeIcon type={questionType} className="size-4 shrink-0" />
-                            <span>{QUESTION_TYPE_LABELS[questionType]}</span>
-                          </button>
+                          <SelectItem key={questionType} value={questionType}>
+                            <span className="flex items-center gap-2">
+                              <QuestionTypeIcon type={questionType} className="size-4 shrink-0" />
+                              {QUESTION_TYPE_LABELS[questionType]}
+                            </span>
+                          </SelectItem>
                         ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </fieldset>
+                      </SelectGroup>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
               {canScore && (
                 <div className="flex items-center gap-3 border-t pt-4">
