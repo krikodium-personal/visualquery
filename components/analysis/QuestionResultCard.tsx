@@ -20,7 +20,6 @@ import {
   isAverageType,
   isChoiceType,
   isStarRatingType,
-  RATING_MAX,
   viewsForType,
   type AnalysisAnswerValue,
   type AnalysisQuestion,
@@ -28,6 +27,7 @@ import {
   type ChartViewMode,
   type CountRow,
 } from "@/lib/analysis";
+import { ratingMaxFromOptions } from "@/lib/rating-options";
 
 export function QuestionResultCard({
   question,
@@ -45,12 +45,17 @@ export function QuestionResultCard({
     [responses, question.id],
   );
 
+  const ratingMax = useMemo(
+    () => ratingMaxFromOptions(question.options),
+    [question.options],
+  );
+
   const distributionRows: CountRow[] = useMemo(() => {
     if (isChoiceType(question.type)) return buildChoiceRows(question.options, answers);
-    if (isStarRatingType(question.type)) return buildRatingRows(answers, RATING_MAX);
+    if (isStarRatingType(question.type)) return buildRatingRows(answers, ratingMax);
     if (question.type === "slider") return buildSliderRows(answers);
     return [];
-  }, [question, answers]);
+  }, [question, answers, ratingMax]);
 
   const average = useMemo(() => averageOf(answers), [answers]);
   const numericStats = useMemo(() => {
@@ -111,7 +116,7 @@ export function QuestionResultCard({
         ) : isStarRatingType(question.type) ? (
           <>
             {activeView === "rating" && average !== null ? (
-              <RatingSummaryView average={average} max={RATING_MAX} rows={distributionRows} />
+              <RatingSummaryView average={average} max={ratingMax} rows={distributionRows} />
             ) : (
               <QuestionResultChart
                 data={chartRows}

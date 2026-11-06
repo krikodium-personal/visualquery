@@ -18,6 +18,11 @@ export const DEFAULT_RATING_LABELS = [
   "Excelente",
 ] as const;
 
+/** SurveyMonkey-style star scale sizes (Escala). */
+export const RATING_SCALES = [2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
+export type RatingScale = (typeof RATING_SCALES)[number];
+export const DEFAULT_RATING_SCALE: RatingScale = 5;
+
 const META_KINDS = new Set(["rating_shape", "rating_color", "rating_labels"]);
 
 export function isRatingMeta(option: QuestionOption): boolean {
@@ -30,6 +35,53 @@ export function isRatingLevel(option: QuestionOption): boolean {
 
 export function starCountLabel(n: number): string {
   return n === 1 ? "1 estrella" : `${n} estrellas`;
+}
+
+export function defaultLabelForLevel(index: number, labelsEnabled: boolean): string {
+  if (!labelsEnabled) return starCountLabel(index + 1);
+  return DEFAULT_RATING_LABELS[index] ?? starCountLabel(index + 1);
+}
+
+export function resizeRatingLevels(
+  levels: { value: string; label: string }[],
+  scale: number,
+  labelsEnabled: boolean,
+): { value: string; label: string }[] {
+  const size = Math.max(
+    RATING_SCALES[0],
+    Math.min(RATING_SCALES[RATING_SCALES.length - 1], Math.round(scale)),
+  );
+  return Array.from({ length: size }, (_, index) => {
+    const existing = levels[index];
+    return {
+      value: String(index + 1),
+      label: existing?.label?.trim()
+        ? existing.label
+        : defaultLabelForLevel(index, labelsEnabled),
+    };
+  });
+}
+
+export function ratingScaleFromLevels(levels: { value: string }[]): RatingScale {
+  const count = levels.length || DEFAULT_RATING_SCALE;
+  const match = RATING_SCALES.find((scale) => scale === count);
+  if (match) return match;
+  if (count < RATING_SCALES[0]) return RATING_SCALES[0];
+  if (count > RATING_SCALES[RATING_SCALES.length - 1]) {
+    return RATING_SCALES[RATING_SCALES.length - 1];
+  }
+  return DEFAULT_RATING_SCALE;
+}
+
+/** Max numeric value for charts / averages (custom Valors or level count). */
+export function ratingMaxFromOptions(options: QuestionOption[]): number {
+  const levels = options.filter(isRatingLevel);
+  if (levels.length === 0) return DEFAULT_RATING_SCALE;
+  const values = levels
+    .map((level) => Number(level.value))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  if (values.length === 0) return levels.length;
+  return Math.max(...values, levels.length);
 }
 
 export function defaultRatingOptions(): QuestionOption[] {

@@ -34,11 +34,14 @@ import {
   type QuestionType,
 } from "@/lib/question-types";
 import {
-  DEFAULT_RATING_LABELS,
+  RATING_SCALES,
   RATING_SHAPES,
   buildRatingOptions,
+  defaultLabelForLevel,
   defaultRatingOptions,
   parseRatingConfig,
+  ratingScaleFromLevels,
+  resizeRatingLevels,
   starCountLabel,
   type RatingShape,
 } from "@/lib/rating-options";
@@ -417,7 +420,7 @@ export function EditQuestionPanel({
       if (patch.labelsEnabled === true && !config.labelsEnabled) {
         levels = levels.map((level, index) => ({
           ...level,
-          label: DEFAULT_RATING_LABELS[index] ?? level.label,
+          label: defaultLabelForLevel(index, true),
         }));
       }
 
@@ -850,6 +853,7 @@ function RatingEditor({
   ) => void;
 }) {
   const config = parseRatingConfig(options);
+  const scale = ratingScaleFromLevels(config.levels);
   const shapeLabel =
     RATING_SHAPES.find((item) => item.value === config.shape)?.label ?? "Estrella";
 
@@ -865,9 +869,37 @@ function RatingEditor({
     onPatch({ levels });
   };
 
+  const setScale = (nextScale: number) => {
+    onPatch({
+      levels: resizeRatingLevels(
+        config.levels.map((level) => ({ value: level.value, label: level.label })),
+        nextScale,
+        config.labelsEnabled,
+      ),
+    });
+  };
+
   return (
     <div className="flex flex-col gap-4 border-t pt-4">
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="flex flex-col gap-2">
+          <Label>Escala</Label>
+          <Select
+            value={String(scale)}
+            onValueChange={(value) => setScale(Number(value))}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue>{() => String(scale)}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {RATING_SCALES.map((size) => (
+                <SelectItem key={size} value={String(size)}>
+                  {size}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <div className="flex flex-col gap-2">
           <Label>Forma</Label>
           <Select
@@ -938,7 +970,7 @@ function RatingEditor({
               <Input
                 value={level.label}
                 onChange={(event) => updateLevel(index, { label: event.target.value })}
-                placeholder={DEFAULT_RATING_LABELS[index] ?? starCountLabel(index + 1)}
+                placeholder={defaultLabelForLevel(index, true)}
               />
               <Input
                 type="text"
