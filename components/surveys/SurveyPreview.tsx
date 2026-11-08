@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Check,
@@ -154,6 +154,21 @@ export function SurveyPreview({
     setPreviewState(state);
   }, []);
 
+  useEffect(() => {
+    const questionId = previewState.currentQuestionId;
+    if (!questionId || !sidebarOpen) return;
+    if (!pageExpanded) {
+      setPageExpanded(true);
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      document
+        .getElementById(`checa-overview-q-${questionId}`)
+        ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [previewState.currentQuestionId, sidebarOpen, pageExpanded]);
+
   function answerForQuestion(questionId: string): AnswerValue | undefined {
     if (previewState.answers[questionId] !== undefined) {
       return previewState.answers[questionId];
@@ -253,7 +268,11 @@ export function SurveyPreview({
                     const selected = answerForQuestion(question.id);
 
                     return (
-                      <li key={question.id} className="pl-2">
+                      <li
+                        key={question.id}
+                        id={`checa-overview-q-${question.id}`}
+                        className="pl-2"
+                      >
                         <div
                           className={cn(
                             "rounded-md px-2 py-1.5 text-sm",
