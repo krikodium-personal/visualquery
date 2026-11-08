@@ -49,6 +49,10 @@ function RatingShapeIcon({
   return <Star className={className} style={style} fill={fill} />;
 }
 
+function starCountFallback(n: number): string {
+  return n === 1 ? "1 estrella" : `${n} estrellas`;
+}
+
 type RuntimeQuestion = {
   id: string;
   title: string;
@@ -571,6 +575,7 @@ function RatingInput({
           const answerValue = Number.isFinite(numeric) ? numeric : index + 1;
           const filled = selectedIndex >= 0 && index <= selectedIndex;
           const active = selectedIndex === index;
+          const labelText = level.label?.trim() || starCountFallback(index + 1);
           return (
             <button
               key={`${level.value}-${index}`}
@@ -587,13 +592,23 @@ function RatingInput({
                   : { color: config.color }
               }
               className={cn(
-                "survey-option-surface flex h-11 min-w-11 flex-1 items-center justify-center border hover:bg-muted",
+                "survey-option-surface flex min-h-11 min-w-11 flex-1 flex-col items-center justify-center gap-1 border px-1.5 py-2 hover:bg-muted",
                 shapeClass,
               )}
-              aria-label={config.labelsEnabled ? level.label : `${index + 1} estrellas`}
-              title={config.labelsEnabled ? level.label : undefined}
+              aria-label={labelText}
+              title={labelText}
             >
-              <RatingShapeIcon shape={config.shape} filled={filled} className="size-5" />
+              <RatingShapeIcon shape={config.shape} filled={filled} className="size-5 shrink-0" />
+              {config.labelsEnabled ? (
+                <span
+                  className={cn(
+                    "max-w-24 text-center text-[11px] leading-tight font-medium wrap-break-word",
+                    active ? "opacity-95" : "text-foreground",
+                  )}
+                >
+                  {labelText}
+                </span>
+              ) : null}
             </button>
           );
         })}
@@ -612,7 +627,7 @@ function RatingInput({
                 : undefined
             }
             className={cn(
-              "survey-option-surface flex h-11 min-w-14 items-center justify-center border px-3 text-sm font-medium hover:bg-muted",
+              "survey-option-surface flex min-h-11 min-w-14 flex-col items-center justify-center border px-3 py-2 text-sm font-medium hover:bg-muted",
               shapeClass,
             )}
           >
@@ -620,11 +635,6 @@ function RatingInput({
           </button>
         ) : null}
       </div>
-      {config.labelsEnabled && selectedIndex >= 0 ? (
-        <p className="text-center text-sm text-muted-foreground">
-          {config.levels[selectedIndex]?.label}
-        </p>
-      ) : null}
       {config.hasOther ? (
         <Input
           value={comment}
