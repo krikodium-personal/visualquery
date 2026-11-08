@@ -1,12 +1,7 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Button } from "@/components/ui/button";
-import { SurveyStatusPill } from "@/components/surveys/SurveyStatusPill";
-import { SurveySteps } from "@/components/surveys/SurveySteps";
-import { DeleteSurveyButton } from "@/components/surveys/DeleteSurveyButton";
+import { SurveyEditorChrome } from "@/components/surveys/SurveyEditorChrome";
 
 export default async function SurveyLayout({
   children,
@@ -23,26 +18,8 @@ export default async function SurveyLayout({
   if (!survey) notFound();
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex shrink-0 flex-col gap-2 border-b px-4 py-3">
-        <div className="flex items-center gap-3">
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            nativeButton={false}
-            render={<Link href="/dashboard" />}
-          >
-            <ArrowLeft className="size-4" />
-          </Button>
-          <h1 className="min-w-0 flex-1 truncate text-lg font-semibold">{survey.title}</h1>
-          <SurveyStatusPill surveyId={survey.id} status={survey.status} />
-          <DeleteSurveyButton surveyId={survey.id} surveyTitle={survey.title} />
-        </div>
-        <div className="pl-11">
-          <SurveySteps surveyId={survey.id} />
-        </div>
-      </div>
-      <div className="min-h-0 flex-1">{children}</div>
-    </div>
+    <SurveyEditorChrome surveyId={survey.id} title={survey.title} status={survey.status}>
+      {children}
+    </SurveyEditorChrome>
   );
 }

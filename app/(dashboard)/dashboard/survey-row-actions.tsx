@@ -97,12 +97,11 @@ export function SurveyRowActions({
           <DropdownMenuItem
             className="cursor-pointer px-2 py-2"
             onClick={() => {
-              if (status === "published") {
-                window.open(`/s/${slug}`, "_blank", "noopener,noreferrer");
-              } else {
-                router.push(`/surveys/${surveyId}/design`);
-                toast.message("Vista previa desde Diseño (la encuesta aún no está abierta)");
-              }
+              window.open(
+                `/surveys/${surveyId}/preview`,
+                "_blank",
+                "noopener,noreferrer",
+              );
             }}
           >
             Checa la encuesta
