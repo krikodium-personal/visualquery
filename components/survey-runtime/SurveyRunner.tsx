@@ -83,6 +83,14 @@ function initialAnswer(question: RuntimeQuestion | undefined): AnswerValue {
   return "";
 }
 
+export type SurveyPreviewState = {
+  currentQuestionId: string | null;
+  answers: Record<string, AnswerValue>;
+  draft: AnswerValue;
+  started: boolean;
+  finished: boolean;
+};
+
 export function SurveyRunner({
   surveyId,
   title,
@@ -93,6 +101,7 @@ export function SurveyRunner({
   design,
   preview = false,
   previewScreen,
+  onPreviewStateChange,
 }: {
   surveyId?: string;
   title: string;
@@ -106,6 +115,8 @@ export function SurveyRunner({
   preview?: boolean;
   /** Opens a specific state when the design editor previews one screen. */
   previewScreen?: "cover" | "question" | "final";
+  /** Checa / overview sidebar sync — only fires in preview mode. */
+  onPreviewStateChange?: (state: SurveyPreviewState) => void;
 }) {
   const [responseId, setResponseId] = useState<string | null>(null);
   const [currentQuestionId, setCurrentQuestionId] = useState<string | null>(rootQuestionId);
@@ -124,6 +135,25 @@ export function SurveyRunner({
     if (preview || !surveyId) return;
     startResponse(surveyId).then(setResponseId).catch(() => toast.error("La encuesta no está disponible. Recargá la página para ver su estado."));
   }, [surveyId, preview]);
+
+  useEffect(() => {
+    if (!preview || !onPreviewStateChange) return;
+    onPreviewStateChange({
+      currentQuestionId,
+      answers: answersByQuestion,
+      draft,
+      started,
+      finished,
+    });
+  }, [
+    preview,
+    onPreviewStateChange,
+    currentQuestionId,
+    answersByQuestion,
+    draft,
+    started,
+    finished,
+  ]);
 
   const ready = preview || responseId !== null;
   const currentQuestion = questions.find((q) => q.id === currentQuestionId) ?? null;
