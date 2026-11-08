@@ -74,14 +74,14 @@ export function SurveyCard({
 
       <Button
         variant="outline"
-        size="sm"
-        className="h-auto shrink-0 whitespace-normal px-3 py-1.5 text-center text-sm leading-tight"
+        size="icon-sm"
+        className="shrink-0"
         nativeButton={false}
+        aria-label="Analiza los resultados"
+        title="Analiza los resultados"
         render={<Link href={`/surveys/${id}/results`} />}
       >
-        Analiza los
-        <br />
-        resultados
+        <BarChart3 className="size-4" />
       </Button>
 
       <div className="shrink-0" onClick={(event) => event.stopPropagation()}>
