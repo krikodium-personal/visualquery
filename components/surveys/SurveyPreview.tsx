@@ -164,7 +164,7 @@ export function SurveyPreview({
     const frame = requestAnimationFrame(() => {
       document
         .getElementById(`checa-overview-q-${questionId}`)
-        ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        ?.scrollIntoView({ block: "center", behavior: "smooth" });
     });
     return () => cancelAnimationFrame(frame);
   }, [previewState.currentQuestionId, sidebarOpen, pageExpanded]);
