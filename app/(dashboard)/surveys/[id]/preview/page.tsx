@@ -34,6 +34,7 @@ export default async function SurveyPreviewPage({
     title: q.title,
     type: q.type,
     options: parseOptions(q.options),
+    isRoot: q.isRoot,
     required: q.required,
     scoringEnabled: q.scoringEnabled,
     minSelections: q.minSelections,

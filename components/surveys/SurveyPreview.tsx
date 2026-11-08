@@ -22,11 +22,8 @@ import {
 } from "@/components/survey-runtime/SurveyRunner";
 import type { QuestionOption } from "@/lib/question-options";
 import { isRatingLevel, isRatingMeta } from "@/lib/rating-options";
-import {
-  resolveNextQuestionId,
-  type AnswerValue,
-  type FlowEdge,
-} from "@/lib/flow-engine";
+import { type AnswerValue, type FlowEdge } from "@/lib/flow-engine";
+import { computeQuestionCodes } from "@/lib/question-codes";
 import type { SurveyDesign } from "@/lib/survey-design";
 import type { QuestionType } from "@/lib/question-types";
 import { cn } from "@/lib/utils";
@@ -36,6 +33,7 @@ type PreviewQuestion = {
   title: string;
   type: QuestionType;
   options: QuestionOption[];
+  isRoot: boolean;
   required: boolean;
   scoringEnabled: boolean;
   minSelections: number | null;
@@ -44,6 +42,8 @@ type PreviewQuestion = {
   requiredErrorMessage: string | null;
   randomizeOptions: boolean;
 };
+
+type OverviewQuestion = PreviewQuestion & { code: string };
 
 type Device = "desktop" | "tablet" | "phone";
 
@@ -58,28 +58,26 @@ const DEVICE_OPTIONS: {
   { id: "phone", label: "Teléfono", icon: Smartphone, maxWidth: 390 },
 ];
 
-function orderQuestions(
+/** Same codes + sort as the canvas Preguntas navigator. */
+function overviewQuestions(
   questions: PreviewQuestion[],
   edges: FlowEdge[],
-  rootQuestionId: string | null,
-): PreviewQuestion[] {
-  if (questions.length === 0) return [];
-  const byId = new Map(questions.map((question) => [question.id, question]));
-  const ordered: PreviewQuestion[] = [];
-  const seen = new Set<string>();
-  let current: string | null = rootQuestionId ?? questions[0]?.id ?? null;
+): OverviewQuestion[] {
+  const codes = computeQuestionCodes(
+    questions.map((question) => ({
+      id: question.id,
+      isRoot: question.isRoot,
+      options: question.options,
+    })),
+    edges,
+  );
 
-  while (current && byId.has(current) && !seen.has(current)) {
-    const question = byId.get(current)!;
-    ordered.push(question);
-    seen.add(current);
-    current = resolveNextQuestionId(current, undefined, edges);
-  }
-
-  for (const question of questions) {
-    if (!seen.has(question.id)) ordered.push(question);
-  }
-  return ordered;
+  return [...questions]
+    .map((question) => ({
+      ...question,
+      code: codes.get(question.id) ?? "?",
+    }))
+    .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
 }
 
 function overviewOptions(question: PreviewQuestion): QuestionOption[] {
@@ -138,8 +136,8 @@ export function SurveyPreview({
   });
 
   const orderedQuestions = useMemo(
-    () => orderQuestions(questions, edges, rootQuestionId),
-    [questions, edges, rootQuestionId],
+    () => overviewQuestions(questions, edges),
+    [questions, edges],
   );
 
   const hasRandomize = questions.some((question) => question.randomizeOptions);
@@ -249,7 +247,7 @@ export function SurveyPreview({
 
               {pageExpanded ? (
                 <ul className="mt-1 space-y-2 pb-4">
-                  {orderedQuestions.map((question, index) => {
+                  {orderedQuestions.map((question) => {
                     const options = overviewOptions(question);
                     const isCurrent = previewState.currentQuestionId === question.id;
                     const selected = answerForQuestion(question.id);
@@ -263,7 +261,7 @@ export function SurveyPreview({
                           )}
                         >
                           <p className="leading-snug">
-                            <span className="text-muted-foreground">P{index + 1}:</span>{" "}
+                            <span className="text-muted-foreground">P{question.code}:</span>{" "}
                             {question.title}
                           </p>
                         </div>
