@@ -12,7 +12,19 @@ export type FontFamily =
   | "courier"
   | "lucida-console"
   | "serif"
-  | "mono";
+  | "mono"
+  | "inter"
+  | "roboto"
+  | "open-sans"
+  | "lato"
+  | "montserrat"
+  | "poppins"
+  | "source-sans-3"
+  | "nunito"
+  | "dm-sans"
+  | "work-sans"
+  | "playfair-display"
+  | "merriweather";
 export type ButtonShape = "rounded" | "pill" | "square";
 export type BackgroundImageScope = "cover" | "all";
 export type ThemePreset =
@@ -88,10 +100,63 @@ export const FONT_STACKS: Record<FontFamily, string> = {
   "lucida-console": "'Lucida Console', Monaco, monospace",
   serif: "ui-serif, Georgia, Cambria, serif",
   mono: "var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace",
+  inter: "'Inter', system-ui, sans-serif",
+  roboto: "'Roboto', Arial, sans-serif",
+  "open-sans": "'Open Sans', Arial, sans-serif",
+  lato: "'Lato', Helvetica, sans-serif",
+  montserrat: "'Montserrat', Helvetica, sans-serif",
+  poppins: "'Poppins', Helvetica, sans-serif",
+  "source-sans-3": "'Source Sans 3', Arial, sans-serif",
+  nunito: "'Nunito', Helvetica, sans-serif",
+  "dm-sans": "'DM Sans', system-ui, sans-serif",
+  "work-sans": "'Work Sans', system-ui, sans-serif",
+  "playfair-display": "'Playfair Display', Georgia, serif",
+  merriweather: "'Merriweather', Georgia, serif",
 };
+
+/** Google Fonts families that need a stylesheet link when selected. */
+export const GOOGLE_FONT_META: Partial<
+  Record<FontFamily, { family: string; weights: string }>
+> = {
+  inter: { family: "Inter", weights: "400;500;600;700" },
+  roboto: { family: "Roboto", weights: "400;500;700" },
+  "open-sans": { family: "Open Sans", weights: "400;600;700" },
+  lato: { family: "Lato", weights: "400;700" },
+  montserrat: { family: "Montserrat", weights: "400;500;600;700" },
+  poppins: { family: "Poppins", weights: "400;500;600;700" },
+  "source-sans-3": { family: "Source Sans 3", weights: "400;600;700" },
+  nunito: { family: "Nunito", weights: "400;600;700" },
+  "dm-sans": { family: "DM Sans", weights: "400;500;700" },
+  "work-sans": { family: "Work Sans", weights: "400;500;600;700" },
+  "playfair-display": { family: "Playfair Display", weights: "400;600;700" },
+  merriweather: { family: "Merriweather", weights: "400;700" },
+};
+
+export function googleFontHref(fontFamily: FontFamily): string | null {
+  const meta = GOOGLE_FONT_META[fontFamily];
+  if (!meta) return null;
+  const family = encodeURIComponent(meta.family).replace(/%20/g, "+");
+  return `https://fonts.googleapis.com/css2?family=${family}:wght@${meta.weights}&display=swap`;
+}
+
+export function isGoogleFont(fontFamily: FontFamily): boolean {
+  return Boolean(GOOGLE_FONT_META[fontFamily]);
+}
 
 export const FONT_OPTIONS: { value: FontFamily; label: string }[] = [
   { value: "system", label: "Sistema (San Francisco / Segoe UI)" },
+  { value: "inter", label: "Inter" },
+  { value: "roboto", label: "Roboto" },
+  { value: "open-sans", label: "Open Sans" },
+  { value: "lato", label: "Lato" },
+  { value: "montserrat", label: "Montserrat" },
+  { value: "poppins", label: "Poppins" },
+  { value: "source-sans-3", label: "Source Sans 3" },
+  { value: "nunito", label: "Nunito" },
+  { value: "dm-sans", label: "DM Sans" },
+  { value: "work-sans", label: "Work Sans" },
+  { value: "playfair-display", label: "Playfair Display" },
+  { value: "merriweather", label: "Merriweather" },
   { value: "helvetica", label: "Helvetica" },
   { value: "arial", label: "Arial" },
   { value: "verdana", label: "Verdana" },
@@ -108,7 +173,7 @@ export function parseFontFamily(value: string): FontFamily {
   if (value === "sans") return "helvetica";
   if (value === "serif") return "georgia";
   if (value === "mono") return "courier";
-  return value in FONT_STACKS ? (value as FontFamily) : "helvetica";
+  return value in FONT_STACKS ? (value as FontFamily) : "system";
 }
 
 export type ThemePresetOption = {

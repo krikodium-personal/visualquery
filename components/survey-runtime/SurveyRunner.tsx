@@ -31,6 +31,7 @@ import { QUESTION_TYPE_INSTRUCTIONS, type QuestionType } from "@/lib/question-ty
 import { parseRatingConfig, type RatingShape } from "@/lib/rating-options";
 import { scoreSurvey } from "@/lib/scoring";
 import { TestResultsReview } from "@/components/survey-runtime/TestResultsReview";
+import { SurveyFontLoader } from "@/components/surveys/SurveyFontLoader";
 
 function RatingShapeIcon({
   shape,
@@ -443,6 +444,7 @@ function CenteredCard({
         } as React.CSSProperties
       }
     >
+      <SurveyFontLoader fontFamily={design.fontFamily} />
       {/* Background image stays put while the questions change. */}
       {design.backgroundImageUrl && (design.backgroundImageScope === "all" || cover) && (
         <div

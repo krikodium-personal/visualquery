@@ -40,7 +40,7 @@ model Survey {
   colorMode            String  @default("light") // light | dark
   backgroundImageUrl   String?
   backgroundImageScope String  @default("all") // cover | all
-  fontFamily           String  @default("sans")
+  fontFamily           String  @default("system")
   buttonShape          String  @default("rounded") // rounded | pill | square
   surfaceStyle         String  @default("solid") // solid | transparent | blur | glass
   logoUrl              String?

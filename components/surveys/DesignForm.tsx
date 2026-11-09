@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SurveyRunner } from "@/components/survey-runtime/SurveyRunner";
+import { SurveyFontCatalogLoader } from "@/components/surveys/SurveyFontLoader";
 import { updateSurveyDesign } from "@/actions/design";
 import type { FlowEdge } from "@/lib/flow-engine";
 import type { QuestionOption } from "@/lib/question-options";
@@ -142,6 +143,7 @@ export function DesignForm({
 
   return (
     <div className="flex flex-col gap-4">
+      <SurveyFontCatalogLoader />
       {/* On a phone there's no room for both, so they become tabs. */}
       <div className="flex gap-1 rounded-lg border p-1 lg:hidden">
         {(
