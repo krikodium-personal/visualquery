@@ -339,7 +339,7 @@ export function SurveyRunner({
         </Progress>
       )}
 
-      <h2 className="text-3xl font-bold leading-tight">{currentQuestion.title}</h2>
+      <h2 className="text-3xl font-bold leading-tight tracking-tight">{currentQuestion.title}</h2>
 
       <p className="-mt-2 text-sm text-muted-foreground">
         {QUESTION_TYPE_INSTRUCTIONS[currentQuestion.type]}
