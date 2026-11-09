@@ -345,34 +345,39 @@ export function SurveyRunner({
         {QUESTION_TYPE_INSTRUCTIONS[currentQuestion.type]}
       </p>
 
-      <QuestionInput
-        question={currentQuestion}
-        value={draft}
-        onChange={setDraft}
-        onSelect={submitValue}
-        disabled={submitting}
-        themeColor={design.themeColor}
-        shapeClass={shapeClass}
-      />
-
       {(() => {
         const ratingHasOther =
           currentQuestion.type === "rating" &&
           currentQuestion.options.some((option) => option.kind === "other");
-        const autoAdvances =
+        const tapEligible =
           currentQuestion.type === "single_choice" ||
           currentQuestion.type === "image_choice" ||
+          currentQuestion.type === "dropdown" ||
           (currentQuestion.type === "rating" && !ratingHasOther);
-        if (autoAdvances) return null;
+        const autoAdvances = design.advanceMode === "tap" && tapEligible;
         return (
-          <Button
-            className={cn("mt-2 w-full", shapeClass)}
-            style={themeButtonStyle}
-            disabled={submitting || !isAnswerComplete(currentQuestion, draft) || !ready}
-            onClick={handleSubmit}
-          >
-            {submitting ? "Enviando..." : "Siguiente"}
-          </Button>
+          <>
+            <QuestionInput
+              question={currentQuestion}
+              value={draft}
+              onChange={setDraft}
+              onSelect={autoAdvances ? submitValue : setDraft}
+              autoAdvance={autoAdvances}
+              disabled={submitting}
+              themeColor={design.themeColor}
+              shapeClass={shapeClass}
+            />
+            {autoAdvances ? null : (
+              <Button
+                className={cn("mt-2 w-full", shapeClass)}
+                style={themeButtonStyle}
+                disabled={submitting || !isAnswerComplete(currentQuestion, draft) || !ready}
+                onClick={handleSubmit}
+              >
+                {submitting ? "Enviando..." : "Siguiente"}
+              </Button>
+            )}
+          </>
         );
       })()}
     </CenteredCard>
@@ -520,6 +525,7 @@ function RatingInput({
   value,
   onChange,
   onSelect,
+  autoAdvance,
   disabled,
   themeColor,
   shapeClass,
@@ -528,6 +534,7 @@ function RatingInput({
   value: AnswerValue;
   onChange: (value: AnswerValue) => void;
   onSelect: (value: AnswerValue) => void;
+  autoAdvance: boolean;
   disabled: boolean;
   themeColor: string;
   shapeClass: string;
@@ -557,14 +564,14 @@ function RatingInput({
 
   const applyRating = (next: number | "na") => {
     if (next === "na") {
-      if (config.hasOther) onChange("na");
-      else onSelect("na");
+      if (autoAdvance && !config.hasOther) onSelect("na");
+      else onChange("na");
       return;
     }
     const payload: AnswerValue =
       config.hasOther && comment.trim() ? { rating: next, other: comment.trim() } : next;
-    if (config.hasOther) onChange(payload);
-    else onSelect(payload);
+    if (autoAdvance && !config.hasOther) onSelect(payload);
+    else onChange(payload);
   };
 
   return (
@@ -657,6 +664,7 @@ function QuestionInput({
   value,
   onChange,
   onSelect,
+  autoAdvance,
   disabled,
   themeColor,
   shapeClass,
@@ -665,10 +673,12 @@ function QuestionInput({
   value: AnswerValue;
   onChange: (value: AnswerValue) => void;
   onSelect: (value: AnswerValue) => void;
+  autoAdvance: boolean;
   disabled: boolean;
   themeColor: string;
   shapeClass: string;
 }) {
+  const pick = autoAdvance ? onSelect : onChange;
   const selectedStyle = { borderColor: themeColor };
   const displayOptions = useMemo(
     () =>
@@ -753,6 +763,7 @@ function QuestionInput({
         value={value}
         onChange={onChange}
         onSelect={onSelect}
+        autoAdvance={autoAdvance}
         disabled={disabled}
         themeColor={themeColor}
         shapeClass={shapeClass}
@@ -792,9 +803,18 @@ function QuestionInput({
 
   if (question.type === "dropdown") {
     return (
-      <select value={typeof value === "string" ? value : ""} onChange={(event) => onChange(event.target.value)} disabled={disabled} className={cn("h-10 w-full border bg-background px-3 text-sm", shapeClass)}>
+      <select
+        value={typeof value === "string" ? value : ""}
+        onChange={(event) => pick(event.target.value)}
+        disabled={disabled}
+        className={cn("h-10 w-full border bg-background px-3 text-sm", shapeClass)}
+      >
         <option value="">Seleccioná una opción</option>
-        {displayOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        {displayOptions.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
       </select>
     );
   }
@@ -921,12 +941,27 @@ function QuestionInput({
     return (
       <div className="grid grid-cols-2 gap-3">
         {displayOptions.map((option) => (
-          <button key={option.value} type="button" disabled={disabled} onClick={() => onSelect(option.value)} style={selected === option.value ? selectedStyle : undefined} className={cn("survey-option-surface overflow-hidden border text-left hover:bg-muted", shapeClass, selected === option.value && "bg-muted")}>
+          <button
+            key={option.value}
+            type="button"
+            disabled={disabled}
+            onClick={() => pick(option.value)}
+            style={selected === option.value ? selectedStyle : undefined}
+            className={cn(
+              "survey-option-surface overflow-hidden border text-left hover:bg-muted",
+              shapeClass,
+              selected === option.value && "bg-muted",
+            )}
+          >
             {option.imageUrl ? (
               // The survey creator controls these external image URLs.
               // eslint-disable-next-line @next/next/no-img-element
               <img src={option.imageUrl} alt="" className="aspect-video w-full object-cover" />
-            ) : <div className="flex aspect-video items-center justify-center bg-muted text-xs text-muted-foreground">Sin imagen</div>}
+            ) : (
+              <div className="flex aspect-video items-center justify-center bg-muted text-xs text-muted-foreground">
+                Sin imagen
+              </div>
+            )}
             <span className="block px-3 py-2 text-sm">{option.label}</span>
           </button>
         ))}
@@ -934,7 +969,7 @@ function QuestionInput({
     );
   }
 
-  // single_choice / dropdown already handled above for dropdown
+  // single_choice (dropdown handled above)
   const selected = typeof value === "string" ? value : null;
   const otherOption = displayOptions.find((option) => option.kind === "other");
   const otherSelected = Boolean(otherOption && selected === otherOption.value);
@@ -945,7 +980,7 @@ function QuestionInput({
           key={option.value}
           type="button"
           disabled={disabled}
-          onClick={() => onSelect(option.value)}
+          onClick={() => pick(option.value)}
           style={selected === option.value ? selectedStyle : undefined}
           className={cn(
             "survey-option-surface border px-3 py-2 text-left text-sm hover:bg-muted",

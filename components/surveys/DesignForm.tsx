@@ -21,6 +21,7 @@ import { updateSurveyDesign } from "@/actions/design";
 import type { FlowEdge } from "@/lib/flow-engine";
 import type { QuestionOption } from "@/lib/question-options";
 import {
+  ADVANCE_MODE_OPTIONS,
   BACKGROUND_IMAGE_SCOPE_OPTIONS,
   BUTTON_SHAPE_OPTIONS,
   COLOR_MODE_OPTIONS,
@@ -33,6 +34,7 @@ import {
   LOGO_SIZE_PRESETS,
   SURFACE_STYLE_OPTIONS,
   THEME_PRESETS,
+  type AdvanceMode,
   type BackgroundImageScope,
   type ButtonShape,
   type ColorMode,
@@ -124,6 +126,7 @@ export function DesignForm({
           logoPosition: values.logoPosition,
           showProgress: values.showProgress,
           progressDisplay: values.progressDisplay,
+          advanceMode: values.advanceMode,
           welcomeEnabled: values.welcomeEnabled,
           welcomeTitle: values.welcomeTitle ?? "",
           welcomeText: values.welcomeText ?? "",
@@ -281,6 +284,43 @@ export function DesignForm({
                 </div>
               </CardContent>
             )}
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="space-y-1">
+                <CardTitle className="text-base">Modo de avance</CardTitle>
+                <p className="text-sm font-normal text-muted-foreground">
+                  Definí cómo se pasa a la siguiente pregunta. Las de selección múltiple
+                  siempre usan el botón Siguiente.
+                </p>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="advance-mode">Avance entre preguntas</Label>
+                <Select
+                  value={values.advanceMode}
+                  onValueChange={(value) => set("advanceMode", value as AdvanceMode)}
+                >
+                  <SelectTrigger id="advance-mode" className="w-full">
+                    <SelectValue>
+                      {(value) =>
+                        ADVANCE_MODE_OPTIONS.find((option) => option.value === value)?.label ??
+                        String(value)
+                      }
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ADVANCE_MODE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
           </Card>
 
           <Card>

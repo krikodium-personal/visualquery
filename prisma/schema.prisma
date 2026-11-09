@@ -48,6 +48,7 @@ model Survey {
   logoPosition         String  @default("top-center") // top|bottom-left|center|right
   showProgress         Boolean @default(true)
   progressDisplay      String  @default("percentage") // percentage | questions
+  advanceMode          String  @default("button") // tap | button
 
   welcomeEnabled     Boolean @default(false)
   welcomeTitle       String?

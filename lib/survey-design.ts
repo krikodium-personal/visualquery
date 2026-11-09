@@ -25,6 +25,8 @@ export type ThemePreset =
   | "vibrant";
 export type SurfaceStyle = "solid" | "transparent" | "blur" | "glass";
 export type ProgressDisplay = "percentage" | "questions";
+/** How respondents move to the next question after answering. */
+export type AdvanceMode = "tap" | "button";
 export type ColorMode = "light" | "dark";
 export type LogoPosition =
   | "top-left"
@@ -54,6 +56,8 @@ export interface SurveyDesign {
   showProgress: boolean;
   /** The value shown beside the progress bar. */
   progressDisplay: ProgressDisplay;
+  /** Auto-advance on answer tap vs require the Siguiente button. */
+  advanceMode: AdvanceMode;
   /** The cover screen shown before the first question. */
   welcomeEnabled: boolean;
   welcomeTitle: string | null;
@@ -228,6 +232,15 @@ export function parseSurfaceStyle(value: string): SurfaceStyle {
 
 export function parseProgressDisplay(value: string): ProgressDisplay {
   return value === "questions" ? "questions" : "percentage";
+}
+
+export const ADVANCE_MODE_OPTIONS: { value: AdvanceMode; label: string }[] = [
+  { value: "tap", label: "Avanzar al tocar una respuesta" },
+  { value: "button", label: "Avanzar con botón (Siguiente)" },
+];
+
+export function parseAdvanceMode(value: string | null | undefined): AdvanceMode {
+  return value === "tap" ? "tap" : "button";
 }
 
 export const COLOR_MODE_OPTIONS: { value: ColorMode; label: string }[] = [

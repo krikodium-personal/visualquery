@@ -85,6 +85,7 @@ const designSchema = z.object({
   ]),
   showProgress: z.boolean(),
   progressDisplay: z.enum(["percentage", "questions"]),
+  advanceMode: z.enum(["tap", "button"]),
   welcomeEnabled: z.boolean(),
   welcomeTitle: optionalText,
   welcomeText: optionalText,
@@ -103,6 +104,7 @@ export async function updateSurveyDesign(surveyId: string, input: SurveyDesignIn
 
   revalidatePath(`/surveys/${surveyId}/design`);
   revalidatePath(`/surveys/${surveyId}/questions`);
+  revalidatePath(`/surveys/${surveyId}/preview`);
   revalidatePath(`/s/${survey.slug}`);
   revalidatePath("/dashboard");
 }
