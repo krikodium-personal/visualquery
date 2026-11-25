@@ -129,17 +129,28 @@ export function SurveyRunner({
   /** Checa / overview sidebar sync — only fires in preview mode. */
   onPreviewStateChange?: (state: SurveyPreviewState) => void;
 }) {
+  const initialFocusId =
+    preview &&
+    previewFocusQuestionId &&
+    questions.some((question) => question.id === previewFocusQuestionId)
+      ? previewFocusQuestionId
+      : rootQuestionId;
+
   const [responseId, setResponseId] = useState<string | null>(null);
-  const [currentQuestionId, setCurrentQuestionId] = useState<string | null>(rootQuestionId);
+  const [currentQuestionId, setCurrentQuestionId] = useState<string | null>(initialFocusId);
   const [draft, setDraft] = useState<AnswerValue>(() =>
-    initialAnswer(questions.find((question) => question.id === rootQuestionId)),
+    initialAnswer(questions.find((question) => question.id === initialFocusId)),
   );
   const [answeredCount, setAnsweredCount] = useState(0);
   const [answersByQuestion, setAnswersByQuestion] = useState<Record<string, AnswerValue>>({});
   const [finished, setFinished] = useState(preview && previewScreen === "final");
-  const [started, setStarted] = useState(
-    preview && previewScreen ? previewScreen !== "cover" : !design.welcomeEnabled,
-  );
+  const [started, setStarted] = useState(() => {
+    if (preview && previewFocusQuestionId && previewFocusQuestionId === initialFocusId) {
+      return true;
+    }
+    if (preview && previewScreen) return previewScreen !== "cover";
+    return !design.welcomeEnabled;
+  });
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -147,7 +158,11 @@ export function SurveyRunner({
     startResponse(surveyId).then(setResponseId).catch(() => toast.error("La encuesta no está disponible. Recargá la página para ver su estado."));
   }, [surveyId, preview]);
 
-  const lastFocusRequestRef = useRef<string | null>(null);
+  const lastFocusRequestRef = useRef<string | null>(
+    preview && initialFocusId && initialFocusId === previewFocusQuestionId
+      ? previewFocusQuestionId
+      : null,
+  );
   const answersByQuestionRef = useRef(answersByQuestion);
   answersByQuestionRef.current = answersByQuestion;
 

@@ -784,16 +784,45 @@ export function Canvas({
     [jumpToQuestion],
   );
 
+  const resolvePreviewStartId = useCallback(() => {
+    const selectedId = nodesRef.current.find((node) => node.selected)?.id ?? null;
+    if (selectedId && orderedQuestions.some((question) => question.id === selectedId)) {
+      return selectedId;
+    }
+    return (
+      orderedQuestions[0]?.id ??
+      nodesRef.current.find((node) => node.data.isRoot)?.id ??
+      nodesRef.current[0]?.id ??
+      null
+    );
+  }, [orderedQuestions]);
+
   const togglePreview = useCallback(() => {
-    setPreviewOpen((open) => {
-      const next = !open;
-      if (next) {
-        lastPreviewQuestionRef.current = null;
-        setPreviewRunKey((key) => key + 1);
-      }
-      return next;
-    });
-  }, []);
+    if (previewOpen) {
+      setPreviewOpen(false);
+      return;
+    }
+    const startId = resolvePreviewStartId();
+    // Seed focus before mount so SurveyRunner's first paint matches selection.
+    lastPreviewQuestionRef.current = startId;
+    if (startId) {
+      setFocusQuestionId(startId);
+      setNodes((current) =>
+        current.map((node) => ({ ...node, selected: node.id === startId })),
+      );
+      setPreviewFocusQuestionId(startId);
+      const target = orderedQuestions.find((question) => question.id === startId);
+      if (target) centerViewportOnQuestion(target.id, target.position, { delayMs: 0 });
+    }
+    setPreviewRunKey((key) => key + 1);
+    setPreviewOpen(true);
+  }, [
+    previewOpen,
+    resolvePreviewStartId,
+    orderedQuestions,
+    setNodes,
+    centerViewportOnQuestion,
+  ]);
 
   const navigateQuestion = useCallback(
     (delta: number) => {
@@ -926,14 +955,12 @@ export function Canvas({
 
   useEffect(() => {
     if (!previewOpen) return;
-    const rootId =
-      orderedQuestions[0]?.id ??
-      nodesRef.current.find((node) => node.data.isRoot)?.id ??
-      nodesRef.current[0]?.id ??
-      null;
-    if (!rootId) return;
-    lastPreviewQuestionRef.current = null;
-    jumpToQuestion(rootId);
+    const startId = resolvePreviewStartId();
+    if (!startId) return;
+    // Prefer selected question when opening; otherwise first in code order.
+    // Seed lastPreview so the runner's initial sync doesn't yank selection back.
+    lastPreviewQuestionRef.current = startId;
+    jumpToQuestion(startId);
     // Only when the panel opens / remounts — not when selection updates.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewOpen, previewRunKey]);
