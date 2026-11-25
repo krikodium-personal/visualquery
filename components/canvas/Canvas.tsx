@@ -38,12 +38,16 @@ import {
   type QuestionOption,
 } from "./QuestionNode";
 import { EditQuestionPanel, type QuestionFormValues } from "./EditQuestionPanel";
-import { SurveyRunner } from "@/components/survey-runtime/SurveyRunner";
+import {
+  SurveyRunner,
+  type SurveyPreviewState,
+} from "@/components/survey-runtime/SurveyRunner";
 import { computeLayout, placeNewQuestion } from "@/lib/layout";
 import type { SurveyDesign } from "@/lib/survey-design";
 import { computeQuestionCodes } from "@/lib/question-codes";
 import { applyCanvasChanges } from "@/actions/canvas";
-import { togglePublish } from "@/actions/surveys";
+
+const CANVAS_PREVIEW_OPEN_KEY = "vq-canvas-preview-open";
 
 const nodeTypes = { question: QuestionNode };
 const edgeMarker = {
@@ -210,7 +214,6 @@ export function Canvas({
   surveyId,
   title,
   description,
-  status,
   design,
   questions,
   edges: surveyEdges,
@@ -226,9 +229,17 @@ export function Canvas({
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [dirty, setDirty] = useState(false);
   const [applying, setApplying] = useState(false);
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewStatus, setPreviewStatus] = useState(status);
-  const [publishing, setPublishing] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem(CANVAS_PREVIEW_OPEN_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [previewRunKey, setPreviewRunKey] = useState(0);
+  const [previewFocusQuestionId, setPreviewFocusQuestionId] = useState<string | null>(null);
+  const lastPreviewQuestionRef = useRef<string | null>(null);
 
   const initialNodes = useMemo(() => buildInitialNodes(questions), []); // eslint-disable-line react-hooks/exhaustive-deps
   const initialEdges = useMemo(() => buildInitialEdges(questions, surveyEdges), []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -737,9 +748,49 @@ export function Canvas({
         current.map((node) => ({ ...node, selected: node.id === target.id })),
       );
       centerViewportOnQuestion(target.id, target.position, { delayMs: 0 });
+      setPreviewFocusQuestionId(target.id);
     },
     [orderedQuestions, setNodes, centerViewportOnQuestion],
   );
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(CANVAS_PREVIEW_OPEN_KEY, previewOpen ? "1" : "0");
+    } catch {
+      /* ignore quota / private mode */
+    }
+  }, [previewOpen]);
+
+  useEffect(() => {
+    if (!previewOpen) {
+      lastPreviewQuestionRef.current = null;
+      setPreviewFocusQuestionId(null);
+      return;
+    }
+    if (nodes.length === 0) setPreviewOpen(false);
+  }, [previewOpen, nodes.length]);
+
+  const handlePreviewState = useCallback(
+    (state: SurveyPreviewState) => {
+      const questionId = state.currentQuestionId;
+      if (!questionId || !state.started || state.finished) return;
+      if (questionId === lastPreviewQuestionRef.current) return;
+      lastPreviewQuestionRef.current = questionId;
+      jumpToQuestion(questionId);
+    },
+    [jumpToQuestion],
+  );
+
+  const togglePreview = useCallback(() => {
+    setPreviewOpen((open) => {
+      const next = !open;
+      if (next) {
+        lastPreviewQuestionRef.current = null;
+        setPreviewRunKey((key) => key + 1);
+      }
+      return next;
+    });
+  }, []);
 
   const navigateQuestion = useCallback(
     (delta: number) => {
@@ -856,177 +907,213 @@ export function Canvas({
       })),
     [edges],
   );
-  const previewRootId = nodes.find((n) => n.data.isRoot)?.id ?? nodes[0]?.id ?? null;
+  // Prefer canvas code order (same as preg N), not RF array order / stale isRoot.
+  // Falling back to nodes[0] was starting preview on the wrong card when isRoot
+  // was missing — e.g. "Nivel?" first in the array while "pais?" is code 1.
+  const previewRootId =
+    orderedQuestions[0]?.id ??
+    nodes.find((n) => n.data.isRoot)?.id ??
+    nodes[0]?.id ??
+    null;
 
-  const handleTogglePublish = useCallback(async () => {
-    setPublishing(true);
-    try {
-      await togglePublish(surveyId);
-      setPreviewStatus((s) => (s === "published" ? "closed" : "published"));
-      toast.success(previewStatus === "published" ? "Encuesta cerrada" : "Encuesta abierta");
-    } catch {
-      toast.error("No se pudo cambiar el estado de publicación");
-    } finally {
-      setPublishing(false);
-    }
-  }, [surveyId, previewStatus]);
+  const questionCodesRecord = useMemo(
+    () => Object.fromEntries(codes.entries()),
+    [codes],
+  );
+
+  useEffect(() => {
+    if (!previewOpen) return;
+    const rootId =
+      orderedQuestions[0]?.id ??
+      nodesRef.current.find((node) => node.data.isRoot)?.id ??
+      nodesRef.current[0]?.id ??
+      null;
+    if (!rootId) return;
+    lastPreviewQuestionRef.current = null;
+    jumpToQuestion(rootId);
+    // Only when the panel opens / remounts — not when selection updates.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewOpen, previewRunKey]);
 
   return (
-    <div className="relative h-full w-full">
-      <ReactFlow
-        nodes={nodesForFlow}
-        edges={edgesForFlow}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        onReconnect={onReconnect}
-        onInit={(instance) => {
-          flowRef.current = instance;
-        }}
-        edgesReconnectable
-        reconnectRadius={EDGE_RECONNECT_RADIUS}
-        elevateEdgesOnSelect
-        nodeTypes={nodeTypes}
-        fitView
-        fitViewOptions={{ maxZoom: 1 }}
-        proOptions={{ hideAttribution: true }}
-      >
-        <Background />
-        <Controls />
-        <MiniMap pannable zoomable className="!bg-card" />
-        <Panel position="top-right" className="flex items-center gap-2">
-          {dirty && (
-            <span className="rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-950 dark:bg-amber-950/40 dark:text-amber-100">
-              Hay cambios sin guardar (p. ej. posición)
-            </span>
-          )}
-          <Button size="sm" variant="outline" onClick={handleAlign} disabled={nodes.length === 0}>
-            <LayoutGrid className="size-4" />
-            Alinear
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setPreviewOpen(true)} disabled={nodes.length === 0}>
-            <Eye className="size-4" />
-            Vista previa
-          </Button>
-          <Button size="sm" onClick={handleApply} disabled={!dirty || applying}>
-            <Save className="size-4" />
-            {applying ? "Guardando..." : dirty ? "Guardar posiciones" : "Guardado"}
-          </Button>
-        </Panel>
-      </ReactFlow>
-
-      {/* Outside React Flow panels: RF bottom-right Panel CSS resets margin and
-          the MiniMap was covering the navigator. Sit just above the MiniMap. */}
-      {orderedQuestions.length > 0 ? (
-        <div
-          className="absolute right-4 z-20 flex items-center gap-0.5 rounded-lg border bg-card p-1 shadow-md"
-          style={{ bottom: 178 }}
-          role="navigation"
-          aria-label="Navegar preguntas del lienzo"
+    <div className="flex h-full w-full min-h-0">
+      <div className="relative min-h-0 min-w-0 flex-1">
+        <ReactFlow
+          nodes={nodesForFlow}
+          edges={edgesForFlow}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          onReconnect={onReconnect}
+          onInit={(instance) => {
+            flowRef.current = instance;
+          }}
+          edgesReconnectable
+          reconnectRadius={EDGE_RECONNECT_RADIUS}
+          elevateEdgesOnSelect
+          nodeTypes={nodeTypes}
+          fitView
+          fitViewOptions={{ maxZoom: 1 }}
+          proOptions={{ hideAttribution: true }}
         >
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="ghost"
-            disabled={focusIndex <= 0}
-            onClick={() => navigateQuestion(-1)}
-            aria-label="Pregunta anterior"
-          >
-            <ChevronLeft className="size-4" />
-          </Button>
-          <Select
-            value={focusedQuestion?.id}
-            onValueChange={(value) => {
-              if (typeof value === "string" && value) jumpToQuestion(value);
-            }}
-          >
-            <SelectTrigger
-              size="sm"
-              className={cn(
-                "h-7 min-w-[4.5rem] border-0 bg-transparent px-1.5 shadow-none",
-                "focus-visible:ring-0 data-placeholder:text-foreground",
-              )}
-              aria-label="Saltar a pregunta"
-            >
-              <SelectValue>
-                {() =>
-                  focusedQuestion ? `preg ${focusedQuestion.code}` : "—"
-                }
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent align="center" className="max-h-72 min-w-56">
-              {orderedQuestions.map((question) => (
-                <SelectItem key={question.id} value={question.id}>
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span className="shrink-0 font-medium tabular-nums">
-                      preg {question.code}
-                    </span>
-                    <span className="truncate text-muted-foreground">
-                      {question.title || "Sin título"}
-                    </span>
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="ghost"
-            disabled={focusIndex >= orderedQuestions.length - 1}
-            onClick={() => navigateQuestion(1)}
-            aria-label="Pregunta siguiente"
-          >
-            <ChevronRight className="size-4" />
-          </Button>
-        </div>
-      ) : null}
-
-      {nodes.length === 0 && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <Button className="pointer-events-auto" onClick={() => setDialog({ mode: "create-root" })}>
-            <Plus className="size-4" /> Agregar primera pregunta
-          </Button>
-        </div>
-      )}
-
-      <EditQuestionPanel
-        open={dialog !== null}
-        onOpenChange={(open) => !open && setDialog(null)}
-        initialValues={initialValues}
-        code={editingCode}
-        logicTargets={logicTargets}
-        onSubmit={handleCreateSubmit}
-      />
-
-      {previewOpen && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-background">
-          <header className="flex shrink-0 items-center justify-between border-b p-3">
-            <Button variant="ghost" size="sm" onClick={() => setPreviewOpen(false)}>
-              <X className="size-4" />
-              Volver
+          <Background />
+          <Controls />
+          <MiniMap pannable zoomable className="!bg-card" />
+          <Panel position="top-right" className="flex items-center gap-2">
+            {dirty && (
+              <span className="rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-950 dark:bg-amber-950/40 dark:text-amber-100">
+                Hay cambios sin guardar (p. ej. posición)
+              </span>
+            )}
+            <Button size="sm" variant="outline" onClick={handleAlign} disabled={nodes.length === 0}>
+              <LayoutGrid className="size-4" />
+              Alinear
             </Button>
-            <Button size="sm" onClick={handleTogglePublish} disabled={publishing}>
-              {publishing
-                ? "Guardando..."
-                : previewStatus === "published"
-                  ? "Cerrar"
-                  : "Abrir"}
+            <Button
+              size="sm"
+              variant={previewOpen ? "secondary" : "outline"}
+              onClick={togglePreview}
+              disabled={nodes.length === 0}
+              aria-pressed={previewOpen}
+            >
+              <Eye className="size-4" />
+              {previewOpen ? "Ocultar previa" : "Vista previa"}
+            </Button>
+            <Button size="sm" onClick={handleApply} disabled={!dirty || applying}>
+              <Save className="size-4" />
+              {applying ? "Guardando..." : dirty ? "Guardar posiciones" : "Guardado"}
+            </Button>
+          </Panel>
+        </ReactFlow>
+
+        {/* Outside React Flow panels: RF bottom-right Panel CSS resets margin and
+            the MiniMap was covering the navigator. Sit just above the MiniMap. */}
+        {orderedQuestions.length > 0 ? (
+          <div
+            className="absolute right-4 z-20 flex items-center gap-0.5 rounded-lg border bg-card p-1 shadow-md"
+            style={{ bottom: 178 }}
+            role="navigation"
+            aria-label="Navegar preguntas del lienzo"
+          >
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              disabled={focusIndex <= 0}
+              onClick={() => navigateQuestion(-1)}
+              aria-label="Pregunta anterior"
+            >
+              <ChevronLeft className="size-4" />
+            </Button>
+            <Select
+              value={focusedQuestion?.id}
+              onValueChange={(value) => {
+                if (typeof value === "string" && value) jumpToQuestion(value);
+              }}
+            >
+              <SelectTrigger
+                size="sm"
+                className={cn(
+                  "h-7 min-w-[4.5rem] border-0 bg-transparent px-1.5 shadow-none",
+                  "focus-visible:ring-0 data-placeholder:text-foreground",
+                )}
+                aria-label="Saltar a pregunta"
+              >
+                <SelectValue>
+                  {() =>
+                    focusedQuestion ? `preg ${focusedQuestion.code}` : "—"
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent align="center" className="max-h-72 min-w-56">
+                {orderedQuestions.map((question) => (
+                  <SelectItem key={question.id} value={question.id}>
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="shrink-0 font-medium tabular-nums">
+                        preg {question.code}
+                      </span>
+                      <span className="truncate text-muted-foreground">
+                        {question.title || "Sin título"}
+                      </span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              disabled={focusIndex >= orderedQuestions.length - 1}
+              onClick={() => navigateQuestion(1)}
+              aria-label="Pregunta siguiente"
+            >
+              <ChevronRight className="size-4" />
+            </Button>
+          </div>
+        ) : null}
+
+        {nodes.length === 0 && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <Button className="pointer-events-auto" onClick={() => setDialog({ mode: "create-root" })}>
+              <Plus className="size-4" /> Agregar primera pregunta
+            </Button>
+          </div>
+        )}
+
+        <EditQuestionPanel
+          open={dialog !== null}
+          onOpenChange={(open) => !open && setDialog(null)}
+          initialValues={initialValues}
+          code={editingCode}
+          logicTargets={logicTargets}
+          onSubmit={handleCreateSubmit}
+        />
+      </div>
+
+      {previewOpen && nodes.length > 0 ? (
+        <aside
+          className={cn(
+            "flex min-h-0 shrink-0 flex-col border-l bg-background",
+            "w-full max-w-md md:w-[min(420px,42%)]",
+            "max-md:absolute max-md:inset-y-0 max-md:right-0 max-md:z-30 max-md:shadow-xl",
+          )}
+          aria-label="Vista previa en vivo"
+        >
+          <header className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold">Vista previa</p>
+              <p className="truncate text-xs text-muted-foreground">
+                Respuestas no se guardan
+              </p>
+            </div>
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              onClick={() => setPreviewOpen(false)}
+              aria-label="Cerrar vista previa"
+            >
+              <X className="size-4" />
             </Button>
           </header>
-          <div className="flex flex-1 flex-col overflow-y-auto">
-            <SurveyRunner
-              preview
-              title={title}
-              description={description}
-              questions={previewQuestions}
-              edges={previewEdges}
-              rootQuestionId={previewRootId}
-              design={design}
-            />
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <div key={previewRunKey} className="flex min-h-full flex-col">
+              <SurveyRunner
+                preview
+                title={title}
+                description={description}
+                questions={previewQuestions}
+                edges={previewEdges}
+                rootQuestionId={previewRootId}
+                questionCodes={questionCodesRecord}
+                previewFocusQuestionId={previewFocusQuestionId}
+                design={design}
+                onPreviewStateChange={handlePreviewState}
+              />
+            </div>
           </div>
-        </div>
-      )}
+        </aside>
+      ) : null}
     </div>
   );
 }

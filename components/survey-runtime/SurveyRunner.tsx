@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Heart, Menu, SkipForward, Star, ThumbsUp } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -106,6 +106,8 @@ export function SurveyRunner({
   design,
   preview = false,
   previewScreen,
+  questionCodes,
+  previewFocusQuestionId,
   onPreviewStateChange,
 }: {
   surveyId?: string;
@@ -120,6 +122,10 @@ export function SurveyRunner({
   preview?: boolean;
   /** Opens a specific state when the design editor previews one screen. */
   previewScreen?: "cover" | "question" | "final";
+  /** Canvas / Checa display codes (e.g. "1", "2a") for the progress label. */
+  questionCodes?: Record<string, string>;
+  /** Canvas navigator / external jump — moves the preview to this question. */
+  previewFocusQuestionId?: string | null;
   /** Checa / overview sidebar sync — only fires in preview mode. */
   onPreviewStateChange?: (state: SurveyPreviewState) => void;
 }) {
@@ -140,6 +146,29 @@ export function SurveyRunner({
     if (preview || !surveyId) return;
     startResponse(surveyId).then(setResponseId).catch(() => toast.error("La encuesta no está disponible. Recargá la página para ver su estado."));
   }, [surveyId, preview]);
+
+  const lastFocusRequestRef = useRef<string | null>(null);
+  const answersByQuestionRef = useRef(answersByQuestion);
+  answersByQuestionRef.current = answersByQuestion;
+
+  useEffect(() => {
+    if (!preview || !previewFocusQuestionId) return;
+    if (previewFocusQuestionId === lastFocusRequestRef.current) return;
+    if (!questions.some((question) => question.id === previewFocusQuestionId)) return;
+
+    lastFocusRequestRef.current = previewFocusQuestionId;
+    const answers = answersByQuestionRef.current;
+    const existing = answers[previewFocusQuestionId];
+    setStarted(true);
+    setFinished(false);
+    setCurrentQuestionId(previewFocusQuestionId);
+    setDraft(
+      existing !== undefined
+        ? existing
+        : initialAnswer(questions.find((question) => question.id === previewFocusQuestionId)),
+    );
+    setAnsweredCount(Object.keys(answers).length);
+  }, [preview, previewFocusQuestionId, questions]);
 
   useEffect(() => {
     if (!preview || !onPreviewStateChange) return;
@@ -328,7 +357,7 @@ export function SurveyRunner({
           className="[&_[data-slot=progress-indicator]]:bg-[var(--survey-theme)]"
         >
           <ProgressLabel className="text-xs font-normal text-muted-foreground">
-            Pregunta {answeredCount + 1}
+            Pregunta {questionCodes?.[currentQuestion.id] ?? answeredCount + 1}
           </ProgressLabel>
           {design.progressDisplay === "questions" ? (
             <span className="ml-auto text-xs text-muted-foreground tabular-nums">
