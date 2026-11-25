@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { ImageUp, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,55 @@ import { cn } from "@/lib/utils";
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const ACCEPTED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+const WEBP_QUALITIES = [0.85, 0.72, 0.58, 0.45] as const;
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") resolve(reader.result);
+      else reject(new Error("No se pudo codificar la imagen"));
+    };
+    reader.onerror = () => reject(new Error("No se pudo leer la imagen"));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function canvasToWebpBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), "image/webp", quality);
+  });
+}
+
+/** Decode any accepted upload and re-encode as a WebP data URL for storage. */
+async function fileToWebpDataUrl(file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file);
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("No se pudo preparar el lienzo de imagen");
+    context.drawImage(bitmap, 0, 0);
+
+    let lastBlob: Blob | null = null;
+    for (const quality of WEBP_QUALITIES) {
+      const blob = await canvasToWebpBlob(canvas, quality);
+      if (!blob) continue;
+      lastBlob = blob;
+      if (blob.size <= MAX_IMAGE_BYTES) {
+        return blobToDataUrl(blob);
+      }
+    }
+
+    if (!lastBlob) {
+      throw new Error("Tu navegador no puede guardar imágenes como WebP");
+    }
+    throw new Error("La imagen convertida supera los 2 MB");
+  } finally {
+    bitmap.close();
+  }
+}
 
 export function ImageSourceField({
   id,
@@ -26,6 +76,7 @@ export function ImageSourceField({
   /** Smaller preview + denser layout for option rows. */
   compact?: boolean;
 }) {
+  const [converting, setConverting] = useState(false);
   const current = value?.trim() || null;
   const uploadedImage = current?.startsWith("data:image/") ?? false;
 
@@ -42,12 +93,18 @@ export function ImageSourceField({
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") onChange(reader.result);
-    };
-    reader.onerror = () => toast.error("No se pudo leer la imagen");
-    reader.readAsDataURL(file);
+    setConverting(true);
+    void fileToWebpDataUrl(file)
+      .then((dataUrl) => {
+        if (!dataUrl.startsWith("data:image/webp")) {
+          throw new Error("El navegador no pudo guardar la imagen como WebP");
+        }
+        onChange(dataUrl);
+      })
+      .catch((error) => {
+        toast.error(error instanceof Error ? error.message : "No se pudo convertir la imagen");
+      })
+      .finally(() => setConverting(false));
   };
 
   return (
@@ -85,19 +142,23 @@ export function ImageSourceField({
           className={cn(
             "inline-flex cursor-pointer items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium shadow-xs hover:bg-accent",
             compact ? "h-8" : "h-9",
+            converting && "pointer-events-none opacity-60",
           )}
         >
           <ImageUp className="size-4" />
-          Subir archivo
+          {converting ? "Convirtiendo…" : "Subir archivo"}
         </Label>
         {!compact ? (
-          <span className="text-xs text-muted-foreground">PNG, JPG, WebP o GIF · máximo 2 MB</span>
+          <span className="text-xs text-muted-foreground">
+            PNG, JPG, WebP o GIF · se guarda como WebP · máximo 2 MB
+          </span>
         ) : null}
         <input
           id={`${id}-upload`}
           type="file"
           accept="image/png,image/jpeg,image/webp,image/gif"
           className="sr-only"
+          disabled={converting}
           onChange={handleUpload}
         />
       </div>
