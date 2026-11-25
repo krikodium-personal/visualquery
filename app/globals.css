@@ -144,6 +144,15 @@
   stroke: #f97316 !important;
 }
 
+/* Edge number pills follow the builder theme (html.dark). React Flow's own
+   dark tokens only apply with .react-flow.dark; keep a fallback for html.dark. */
+.dark .react-flow__edge-textbg {
+  fill: #000000;
+}
+.dark .react-flow__edge-text {
+  fill: #f8fafc;
+}
+
 /* React Flow places its invisible reconnect control just outside an edge.
    Move the selected edge's target control onto the visible arrowhead so the
    arrow tip itself can be grabbed and dragged to another question. */

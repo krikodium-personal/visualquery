@@ -19,6 +19,7 @@ import {
   MarkerType,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -240,6 +241,8 @@ export function Canvas({
   const [previewRunKey, setPreviewRunKey] = useState(0);
   const [previewFocusQuestionId, setPreviewFocusQuestionId] = useState<string | null>(null);
   const lastPreviewQuestionRef = useRef<string | null>(null);
+  const { resolvedTheme } = useTheme();
+  const canvasColorMode = resolvedTheme === "dark" ? "dark" : "light";
 
   const initialNodes = useMemo(() => buildInitialNodes(questions), []); // eslint-disable-line react-hooks/exhaustive-deps
   const initialEdges = useMemo(() => buildInitialEdges(questions, surveyEdges), []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -948,6 +951,7 @@ export function Canvas({
           onInit={(instance) => {
             flowRef.current = instance;
           }}
+          colorMode={canvasColorMode}
           edgesReconnectable
           reconnectRadius={EDGE_RECONNECT_RADIUS}
           elevateEdgesOnSelect
