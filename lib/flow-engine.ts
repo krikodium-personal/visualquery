@@ -6,7 +6,7 @@ export interface FlowEdge {
 
 export type AnswerValue = string | string[] | number | Record<string, string | number>;
 
-function answerMatchesOption(answer: AnswerValue, optionValue: string): boolean {
+export function answerMatchesOption(answer: AnswerValue, optionValue: string): boolean {
   if (Array.isArray(answer)) return answer.includes(optionValue);
   if (typeof answer === "object") return Object.values(answer).some((value) => String(value) === optionValue);
   return String(answer) === optionValue;
@@ -90,4 +90,41 @@ export function computeQuestionProgress(
     current: answeredCount + 1,
     total: answeredCount + remaining,
   };
+}
+
+export type AnswerAction = "end" | "disqualify";
+
+/**
+ * Special destination chosen by the answer: an option marked "Descalificar" wins over
+ * one marked "Fin de la encuesta"; null means follow the normal edges.
+ */
+export function resolveAnswerAction(
+  options: { value: string; action?: AnswerAction }[],
+  answer: AnswerValue | undefined,
+): AnswerAction | null {
+  if (answer === undefined) return null;
+  const matched = options.filter(
+    (option) => option.action && answerMatchesOption(answer, option.value),
+  );
+  if (matched.some((option) => option.action === "disqualify")) return "disqualify";
+  if (matched.length > 0) return "end";
+  return null;
+}
+
+/**
+ * First question of the survey. Trusts the `isRoot` flag only when nothing points at that
+ * question; otherwise takes the oldest question no edge leads to (the canvas starts there too),
+ * and as a last resort the oldest question. `questions` must come ordered by creation.
+ */
+export function findRootQuestion<Q extends { id: string; isRoot: boolean }>(
+  questions: Q[],
+  edges: { targetQuestionId: string }[],
+): Q | null {
+  const targeted = new Set(edges.map((edge) => edge.targetQuestionId));
+  return (
+    questions.find((question) => question.isRoot && !targeted.has(question.id)) ??
+    questions.find((question) => !targeted.has(question.id)) ??
+    questions[0] ??
+    null
+  );
 }

@@ -1,5 +1,8 @@
 import { notFound } from "next/navigation";
+import { findRootQuestion } from "@/lib/flow-engine";
 import { prisma } from "@/lib/prisma";
+import { parseCustomVariables, pickVariableValues } from "@/lib/custom-variables";
+import { fullQuotaValues } from "@/lib/quotas";
 import { parseOptions } from "@/lib/question-options";
 import {
   parseBackgroundImageScope,
@@ -21,16 +24,17 @@ export default async function PublicSurveyPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ embed?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { slug } = await params;
-  const { embed } = await searchParams;
+  const query = await searchParams;
+  const embed = Array.isArray(query.embed) ? query.embed[0] : query.embed;
   const isEmbed = embed === "1" || embed === "true";
 
   const survey = await prisma.survey.findFirst({
     where: { slug, status: { in: ["published", "closed"] } },
     include: {
-      questions: true,
+      questions: { orderBy: { createdAt: "asc" } },
       edges: true,
       _count: { select: { responses: true } },
     },
@@ -64,11 +68,24 @@ export default async function PublicSurveyPage({
     );
   }
 
+  const variables = pickVariableValues(parseCustomVariables(survey.customVariables), query);
+
+  // Options whose quota is already filled stop being offered.
+  const fullQuotas = new Map<string, Set<string>>();
+  await Promise.all(
+    survey.questions.map(async (q) => {
+      const options = parseOptions(q.options);
+      if (options.some((option) => option.quota !== undefined)) {
+        fullQuotas.set(q.id, await fullQuotaValues(q.id, options));
+      }
+    }),
+  );
+
   const questions = survey.questions.map((q) => ({
     id: q.id,
     title: q.title,
     type: q.type,
-    options: parseOptions(q.options),
+    options: parseOptions(q.options).filter((option) => !fullQuotas.get(q.id)?.has(option.value)),
     required: q.required,
     scoringEnabled: q.scoringEnabled,
     minSelections: q.minSelections,
@@ -87,7 +104,7 @@ export default async function PublicSurveyPage({
     sourceOptionValue: e.sourceOptionValue,
   }));
 
-  const rootQuestion = survey.questions.find((q) => q.isRoot) ?? survey.questions[0] ?? null;
+  const rootQuestion = findRootQuestion(survey.questions, survey.edges);
 
   return (
     <SurveyPasswordGate
@@ -98,6 +115,7 @@ export default async function PublicSurveyPage({
       <div className={`flex flex-col ${isEmbed ? "min-h-[640px]" : "min-h-svh"}`}>
         <SurveyRunner
           surveyId={survey.id}
+          variables={variables}
           title={survey.title}
           description={survey.description}
           questions={questions}

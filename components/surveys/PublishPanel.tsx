@@ -2,8 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Copy, ExternalLink } from "lucide-react";
-import { togglePublish, updateCollectorOptions } from "@/actions/surveys";
+import { Copy, ExternalLink, Plus, Trash2 } from "lucide-react";
+import { togglePublish, updateCollectorOptions, updateCustomVariables } from "@/actions/surveys";
+import type { CustomVariable } from "@/lib/custom-variables";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,6 +19,7 @@ export function PublishPanel({
   accessPassword,
   responseLimit,
   cutoffAt,
+  customVariables,
 }: {
   surveyId: string;
   slug: string;
@@ -27,11 +29,31 @@ export function PublishPanel({
   accessPassword: string | null;
   responseLimit: number | null;
   cutoffAt: string | null;
+  customVariables: CustomVariable[];
 }) {
   const [isPending, startTransition] = useTransition();
   const [password, setPassword] = useState(accessPassword ?? "");
   const [limit, setLimit] = useState(responseLimit !== null ? String(responseLimit) : "");
   const [cutoffLocal, setCutoffLocal] = useState(() => toDatetimeLocal(cutoffAt));
+
+  const [variables, setVariables] = useState<{ name: string; label: string }[]>(
+    customVariables.map((variable) => ({ name: variable.name, label: variable.label ?? "" })),
+  );
+
+  const saveVariables = () =>
+    startTransition(async () => {
+      try {
+        await updateCustomVariables(
+          surveyId,
+          variables
+            .filter((variable) => variable.name.trim() !== "")
+            .map((variable) => ({ name: variable.name.trim(), label: variable.label.trim() })),
+        );
+        toast.success("Variables guardadas");
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "No se pudieron guardar las variables");
+      }
+    });
 
   const published = status === "published";
   const noQuestions = questionCount === 0;
@@ -209,6 +231,78 @@ export function PublishPanel({
               <div>
                 <Button onClick={saveCollectorOptions} disabled={isPending}>
                   {isPending ? "Guardando..." : "Guardar opciones"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Variables personalizadas</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              <p className="text-sm text-muted-foreground">
+                Datos que viajan en el link y se guardan con cada respuesta, por ejemplo{" "}
+                <code className="rounded bg-muted px-1">{publicUrl}?campania=mail1</code>. Aparecen
+                en el análisis y en el CSV.
+              </p>
+              {variables.map((variable, index) => (
+                <div key={index} className="grid grid-cols-[1fr_1fr_auto] items-end gap-2">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor={`var-name-${index}`}>Nombre</Label>
+                    <Input
+                      id={`var-name-${index}`}
+                      value={variable.name}
+                      maxLength={50}
+                      placeholder="campania"
+                      autoComplete="off"
+                      onChange={(event) =>
+                        setVariables((current) =>
+                          current.map((item, i) =>
+                            i === index ? { ...item, name: event.target.value.replace(/\s/g, "") } : item,
+                          ),
+                        )
+                      }
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor={`var-label-${index}`}>Etiqueta (opcional)</Label>
+                    <Input
+                      id={`var-label-${index}`}
+                      value={variable.label}
+                      maxLength={250}
+                      placeholder="Campaña"
+                      autoComplete="off"
+                      onChange={(event) =>
+                        setVariables((current) =>
+                          current.map((item, i) =>
+                            i === index ? { ...item, label: event.target.value } : item,
+                          ),
+                        )
+                      }
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Quitar variable"
+                    onClick={() => setVariables((current) => current.filter((_, i) => i !== index))}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+              ))}
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setVariables((current) => [...current, { name: "", label: "" }])}
+                >
+                  <Plus className="size-4" /> Agregar variable
+                </Button>
+                <Button onClick={saveVariables} disabled={isPending}>
+                  {isPending ? "Guardando..." : "Guardar variables"}
                 </Button>
               </div>
             </CardContent>

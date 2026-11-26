@@ -77,7 +77,11 @@ export function SurveyResultsAnalysis({
   }
 
   function exportCsv() {
-    const csv = buildResponsesCsv(questionsShown, filteredResponses);
+    const csv = buildResponsesCsv(
+      questionsShown,
+      filteredResponses,
+      data.customVariables.map((variable) => variable.name),
+    );
     const slug = data.surveyTitle
       .toLowerCase()
       .normalize("NFD")
@@ -237,7 +241,11 @@ export function SurveyResultsAnalysis({
         </TabsContent>
 
         <TabsContent value="individual" className="mt-4">
-          <IndividualResponses questions={questionsShown} responses={filteredResponses} />
+          <IndividualResponses
+            questions={questionsShown}
+            responses={filteredResponses}
+            customVariables={data.customVariables}
+          />
         </TabsContent>
 
         <TabsContent value="flow" className="mt-4">

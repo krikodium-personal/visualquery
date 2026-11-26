@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { parseOptions } from "@/lib/question-options";
 import { readAnswerValue, type AnalysisPayload } from "@/lib/analysis";
+import { parseCustomVariables, parseResponseVariables } from "@/lib/custom-variables";
 import { parseAnalysisViews } from "@/lib/analysis-views";
 import { SurveyResultsAnalysis } from "@/components/analysis/SurveyResultsAnalysis";
 import type { QuestionType } from "@/lib/question-types";
@@ -44,10 +45,18 @@ export default async function SurveyResultsPage({
       targetQuestionId: edge.targetQuestionId,
       sourceOptionValue: edge.sourceOptionValue,
     })),
-    responses: survey.responses.map((response) => ({
+    customVariables: parseCustomVariables(survey.customVariables).map((variable) => ({
+      name: variable.name,
+      label: variable.label ?? "",
+    })),
+    // Disqualified respondents are kept out of the results, like SurveyMonkey.
+    responses: survey.responses
+      .filter((response) => !response.disqualified)
+      .map((response) => ({
       id: response.id,
       startedAt: response.startedAt.toISOString(),
       completedAt: response.completedAt?.toISOString() ?? null,
+      variables: parseResponseVariables(response.variables),
       answers: response.answers.map((answer) => ({
         questionId: answer.questionId,
         value: readAnswerValue(answer.value),

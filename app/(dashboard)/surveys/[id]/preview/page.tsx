@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { findRootQuestion } from "@/lib/flow-engine";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { parseOptions } from "@/lib/question-options";
@@ -26,7 +27,7 @@ export default async function SurveyPreviewPage({
 
   const survey = await prisma.survey.findFirst({
     where: { id, ownerId: session!.user.id },
-    include: { questions: true, edges: true },
+    include: { questions: { orderBy: { createdAt: "asc" } }, edges: true },
   });
 
   if (!survey) notFound();
@@ -55,7 +56,7 @@ export default async function SurveyPreviewPage({
     sourceOptionValue: e.sourceOptionValue,
   }));
 
-  const rootQuestion = survey.questions.find((q) => q.isRoot) ?? survey.questions[0] ?? null;
+  const rootQuestion = findRootQuestion(survey.questions, survey.edges);
 
   return (
     <SurveyPreview

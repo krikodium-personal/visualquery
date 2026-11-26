@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { parseCustomVariables } from "@/lib/custom-variables";
 import { PublishPanel } from "@/components/surveys/PublishPanel";
 
 export default async function SurveyPublishPage({
@@ -21,6 +22,7 @@ export default async function SurveyPublishPage({
       accessPassword: true,
       responseLimit: true,
       cutoffAt: true,
+      customVariables: true,
       _count: { select: { questions: true } },
     },
   });
@@ -42,6 +44,7 @@ export default async function SurveyPublishPage({
         accessPassword={survey.accessPassword}
         responseLimit={survey.responseLimit}
         cutoffAt={survey.cutoffAt?.toISOString() ?? null}
+        customVariables={parseCustomVariables(survey.customVariables)}
       />
     </div>
   );

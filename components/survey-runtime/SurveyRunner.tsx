@@ -22,11 +22,12 @@ import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress
 import {
   computeProgress,
   computeQuestionProgress,
+  resolveAnswerAction,
   resolveNextQuestionId,
   type AnswerValue,
   type FlowEdge,
 } from "@/lib/flow-engine";
-import { startResponse, submitAnswer, completeResponse } from "@/actions/responses";
+import { startResponse, submitAnswer, completeResponse, disqualifyResponse } from "@/actions/responses";
 import {
   BUTTON_SHAPE_CLASS,
   DESIGN_DEFAULTS,
@@ -98,6 +99,7 @@ export type SurveyPreviewState = {
 
 export function SurveyRunner({
   surveyId,
+  variables,
   title,
   description,
   questions,
@@ -111,6 +113,8 @@ export function SurveyRunner({
   onPreviewStateChange,
 }: {
   surveyId?: string;
+  /** Custom variables read from the public link (only the survey's defined ones). */
+  variables?: Record<string, string>;
   title: string;
   description: string | null;
   questions: RuntimeQuestion[];
@@ -152,10 +156,12 @@ export function SurveyRunner({
     return !design.welcomeEnabled;
   });
   const [submitting, setSubmitting] = useState(false);
+  const [disqualified, setDisqualified] = useState(false);
 
   useEffect(() => {
     if (preview || !surveyId) return;
-    startResponse(surveyId).then(setResponseId).catch(() => toast.error("La encuesta no está disponible. Recargá la página para ver su estado."));
+    startResponse(surveyId, variables).then(setResponseId).catch(() => toast.error("La encuesta no está disponible. Recargá la página para ver su estado."));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [surveyId, preview]);
 
   const lastFocusRequestRef = useRef<string | null>(
@@ -226,14 +232,19 @@ export function SurveyRunner({
       try {
         if (!preview) await submitAnswer(responseId!, currentQuestion.id, value);
         setAnswersByQuestion((previous) => ({ ...previous, [currentQuestion.id]: value }));
-        const nextId = resolveNextQuestionId(currentQuestion.id, value, edges);
+        const action = resolveAnswerAction(currentQuestion.options, value);
+        const nextId = action ? null : resolveNextQuestionId(currentQuestion.id, value, edges);
         setAnsweredCount((c) => c + 1);
         if (nextId) {
           setDraft(initialAnswer(questions.find((question) => question.id === nextId)));
           setCurrentQuestionId(nextId);
         } else {
           setDraft("");
-          if (!preview) await completeResponse(responseId!);
+          if (!preview) {
+            if (action === "disqualify") await disqualifyResponse(responseId!);
+            else await completeResponse(responseId!);
+          }
+          setDisqualified(action === "disqualify");
           setFinished(true);
         }
       } catch (error) {
@@ -284,6 +295,17 @@ export function SurveyRunner({
     return (
       <CenteredCard {...shell}>
         <p className="text-muted-foreground">Esta encuesta todavía no tiene preguntas.</p>
+      </CenteredCard>
+    );
+  }
+
+  if (finished && disqualified) {
+    return (
+      <CenteredCard {...shell}>
+        <h2 className="text-2xl font-semibold">Gracias por tu tiempo</h2>
+        <p className="text-muted-foreground">
+          Con tus respuestas no podés continuar con esta encuesta.
+        </p>
       </CenteredCard>
     );
   }

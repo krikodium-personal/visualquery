@@ -37,6 +37,10 @@ const optionSchema = z.object({
   otherMaxLength: z.number().int().min(1).max(2000).optional(),
   otherErrorMessage: z.string().max(300).optional(),
   otherInvalidMessage: z.string().max(300).optional(),
+  // Logic: answering this option ends the survey or disqualifies the respondent.
+  action: z.enum(["end", "disqualify"]).optional(),
+  // Quota: max completed responses that may pick this option; absent = unlimited.
+  quota: z.number().int().positive().max(1_000_000).optional(),
   isCorrect: z.boolean().optional(),
   points: z.number().int().nonnegative().optional(),
 });

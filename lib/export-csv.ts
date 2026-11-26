@@ -23,12 +23,14 @@ function formatAnswer(value: AnalysisAnswerValue, question: AnalysisQuestion): s
 export function buildResponsesCsv(
   questions: AnalysisQuestion[],
   responses: AnalysisResponse[],
+  variableNames: string[] = [],
 ): string {
   const headers = [
     "response_id",
     "started_at",
     "completed_at",
     "status",
+    ...variableNames,
     ...questions.map((question) => `Q${question.index}: ${question.title}`),
   ];
 
@@ -41,6 +43,7 @@ export function buildResponsesCsv(
       response.startedAt,
       response.completedAt ?? "",
       response.completedAt ? "completada" : "parcial",
+      ...variableNames.map((name) => response.variables[name] ?? ""),
       ...questions.map((question) =>
         formatAnswer(byQuestion.get(question.id) ?? null, question),
       ),

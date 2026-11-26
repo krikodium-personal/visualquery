@@ -15,9 +15,11 @@ import { answerKeyLabel, formatChoiceWithOther } from "@/lib/question-options";
 export function IndividualResponses({
   questions,
   responses,
+  customVariables = [],
 }: {
   questions: AnalysisQuestion[];
   responses: AnalysisResponse[];
+  customVariables?: { name: string; label: string }[];
 }) {
   const ordered = useMemo(
     () =>
@@ -89,6 +91,18 @@ export function IndividualResponses({
             </span>
           ) : null}
         </div>
+
+        {customVariables.some((variable) => response.variables[variable.name]) ? (
+          <div className="flex flex-wrap gap-2 text-sm">
+            {customVariables
+              .filter((variable) => response.variables[variable.name])
+              .map((variable) => (
+                <Badge key={variable.name} variant="outline">
+                  {variable.label || variable.name}: {response.variables[variable.name]}
+                </Badge>
+              ))}
+          </div>
+        ) : null}
 
         <ul className="flex flex-col gap-3">
           {questions.map((question) => {

@@ -1,7 +1,9 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import type { AnswerValue } from "@/lib/flow-engine";
+import { MAX_VARIABLE_VALUE_LENGTH, parseCustomVariables } from "@/lib/custom-variables";
+import { answerMatchesOption, resolveAnswerAction, type AnswerValue } from "@/lib/flow-engine";
+import { fullQuotaValues } from "@/lib/quotas";
 import {
   countAnsweredMatrixRows,
   parseOptions,
@@ -17,6 +19,7 @@ async function assertSurveyAcceptingResponses(surveyId: string) {
       id: true,
       responseLimit: true,
       cutoffAt: true,
+      customVariables: true,
       _count: { select: { responses: true } },
     },
   });
@@ -32,9 +35,23 @@ async function assertSurveyAcceptingResponses(surveyId: string) {
   return survey;
 }
 
-export async function startResponse(surveyId: string): Promise<string> {
-  await assertSurveyAcceptingResponses(surveyId);
-  const response = await prisma.response.create({ data: { surveyId } });
+export async function startResponse(
+  surveyId: string,
+  variables: Record<string, string> = {},
+): Promise<string> {
+  const survey = await assertSurveyAcceptingResponses(surveyId);
+  // Only the variables the survey defines are stored, whatever the client sends.
+  const definitions = parseCustomVariables(survey.customVariables);
+  const allowed = new Set(definitions.map((definition) => definition.name));
+  const clean: Record<string, string> = {};
+  for (const [name, value] of Object.entries(variables)) {
+    if (allowed.has(name) && typeof value === "string" && value.trim()) {
+      clean[name] = value.trim().slice(0, MAX_VARIABLE_VALUE_LENGTH);
+    }
+  }
+  const response = await prisma.response.create({
+    data: { surveyId, variables: Object.keys(clean).length > 0 ? clean : undefined },
+  });
   return response.id;
 }
 
@@ -115,6 +132,17 @@ export async function submitAnswer(
     }
   }
 
+  const questionOptions = parseOptions(question.options);
+  if (questionOptions.some((option) => option.quota !== undefined)) {
+    const full = await fullQuotaValues(question.id, questionOptions, responseId);
+    const blocked = questionOptions.some(
+      (option) => full.has(option.value) && answerMatchesOption(value, option.value),
+    );
+    if (blocked) {
+      throw new Error("Esa opción ya alcanzó su cupo. Recargá la página y elegí otra.");
+    }
+  }
+
   await prisma.answer.upsert({
     where: { responseId_questionId: { responseId, questionId } },
     create: { responseId, questionId, value },
@@ -133,5 +161,41 @@ export async function completeResponse(responseId: string) {
   await prisma.response.update({
     where: { id: responseId },
     data: { completedAt: new Date() },
+  });
+}
+
+/**
+ * Marks the respondent as disqualified. The client only asks for it; the server checks that
+ * one of the saved answers really picked an option set to "Descalificar".
+ */
+export async function disqualifyResponse(responseId: string) {
+  const response = await prisma.response.findUnique({
+    where: { id: responseId },
+    select: {
+      surveyId: true,
+      survey: { select: { status: true } },
+      answers: { select: { questionId: true, value: true } },
+    },
+  });
+  if (!response) return;
+  if (response.survey.status !== "published") throw new Error("La encuesta ya no acepta respuestas");
+
+  const questions = await prisma.question.findMany({
+    where: { surveyId: response.surveyId },
+    select: { id: true, options: true },
+  });
+  const optionsByQuestion = new Map(
+    questions.map((question) => [question.id, parseOptions(question.options)]),
+  );
+  const earned = response.answers.some(
+    (answer) =>
+      resolveAnswerAction(optionsByQuestion.get(answer.questionId) ?? [], answer.value as AnswerValue) ===
+      "disqualify",
+  );
+  if (!earned) throw new Error("Respuesta no válida");
+
+  await prisma.response.update({
+    where: { id: responseId },
+    data: { completedAt: new Date(), disqualified: true },
   });
 }

@@ -1364,43 +1364,104 @@ export function EditQuestionPanel({
                   La lógica por respuesta aplica a opción múltiple, casillas, menú desplegable y
                   elección de imagen. También podés conectar flechas en el canvas.
                 </p>
-              ) : logicTargets.length === 0 ? (
-                <p className="rounded-lg border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">
-                  Agregá más preguntas al canvas para definir saltos. Mientras tanto, usá «+» en
-                  cada opción del nodo.
-                </p>
               ) : (
                 <>
                   <p className="text-sm text-muted-foreground">
-                    Para cada respuesta, elegí a qué pregunta saltar (como SurveyMonkey Question
-                    Skip Logic). Dejá «Sin cambio» para no definir un salto desde acá.
+                    Para cada respuesta, elegí a qué pregunta saltar, terminar la encuesta o
+                    descalificar al encuestado (como Skip Logic de SurveyMonkey). Dejá «Sin cambio»
+                    para no definir un salto desde acá. El cupo limita cuántas respuestas
+                    completadas pueden elegir esa opción; al llenarse deja de mostrarse.
                   </p>
                   <div className="flex flex-col gap-3">
-                    {logicRows.map((row) => (
-                      <label
-                        key={row.key}
-                        className="grid gap-1.5 rounded-lg border px-3 py-2 text-sm sm:grid-cols-[1fr_1fr] sm:items-center"
-                      >
-                        <span className="font-medium">Si responde «{row.label}»</span>
-                        <select
-                          className="h-9 rounded-md border bg-background px-2 text-sm"
-                          value={optionLogic[row.key] ?? ""}
-                          onChange={(event) =>
-                            setOptionLogic((current) => ({
-                              ...current,
-                              [row.key]: event.target.value || null,
-                            }))
-                          }
+                    {logicRows.map((row) => {
+                      const isDefault = row.key === "__default__";
+                      const option = isDefault
+                        ? undefined
+                        : editableOptions.find((candidate) => candidate.value === row.key);
+                      const selectValue = option?.action
+                        ? `__${option.action}__`
+                        : (optionLogic[row.key] ?? "");
+                      return (
+                        <div
+                          key={row.key}
+                          className="grid gap-1.5 rounded-lg border px-3 py-2 text-sm sm:grid-cols-[1fr_1fr] sm:items-center"
                         >
-                          <option value="">Sin cambio / usar canvas</option>
-                          {logicTargets.map((target) => (
-                            <option key={target.id} value={target.id}>
-                              P{target.code}. {target.title || "Sin título"}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    ))}
+                          <span className="font-medium">
+                            {isDefault ? row.label : `Si responde «${row.label}»`}
+                          </span>
+                          <select
+                            aria-label={`Destino para ${row.label}`}
+                            className="h-9 rounded-md border bg-background px-2 text-sm"
+                            value={selectValue}
+                            onChange={(event) => {
+                              const chosen = event.target.value;
+                              if (!isDefault) {
+                                const action =
+                                  chosen === "__end__"
+                                    ? "end"
+                                    : chosen === "__disqualify__"
+                                      ? "disqualify"
+                                      : undefined;
+                                setOptions((previous) =>
+                                  previous.map((item) =>
+                                    item.value === row.key ? { ...item, action } : item,
+                                  ),
+                                );
+                              }
+                              setOptionLogic((current) => ({
+                                ...current,
+                                [row.key]: chosen.startsWith("__") ? null : chosen || null,
+                              }));
+                            }}
+                          >
+                            <option value="">Sin cambio / usar canvas</option>
+                            {!isDefault ? (
+                              <>
+                                <option value="__end__">Fin de la encuesta</option>
+                                <option value="__disqualify__">Descalificar al encuestado</option>
+                              </>
+                            ) : null}
+                            {logicTargets.map((target) => (
+                              <option key={target.id} value={target.id}>
+                                P{target.code}. {target.title || "Sin título"}
+                              </option>
+                            ))}
+                          </select>
+                          {option ? (
+                            <>
+                              <label
+                                htmlFor={`quota-${row.key}`}
+                                className="text-muted-foreground"
+                              >
+                                Cupo de respuestas
+                              </label>
+                              <input
+                                id={`quota-${row.key}`}
+                                type="number"
+                                min={1}
+                                max={1000000}
+                                inputMode="numeric"
+                                placeholder="Sin cupo"
+                                className="h-9 rounded-md border bg-background px-2 text-sm"
+                                value={option.quota ?? ""}
+                                onChange={(event) => {
+                                  const parsed = Math.floor(Number(event.target.value));
+                                  const quota =
+                                    event.target.value !== "" && Number.isFinite(parsed) && parsed >= 1
+                                      ? parsed
+                                      : undefined;
+                                  setOptions((previous) =>
+                                    previous.map((item) =>
+                                      item.value === row.key ? { ...item, quota } : item,
+                                    ),
+                                  );
+                                }}
+                              />
+                            </>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                   </div>
                 </>
               )}

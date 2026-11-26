@@ -5,6 +5,13 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+import {
+  customVariableSchema,
+  parseCustomVariables,
+  MAX_CUSTOM_VARIABLES,
+  RESERVED_VARIABLE_NAMES,
+  type CustomVariable,
+} from "@/lib/custom-variables";
 
 function slugify(title: string): string {
   const base = title
@@ -130,6 +137,41 @@ export async function updateCollectorOptions(
   revalidatePath(`/s/${survey.slug}`);
 }
 
+/** URL parameters captured with each response (SurveyMonkey "Variables personalizadas"). */
+export async function updateCustomVariables(surveyId: string, variables: CustomVariable[]) {
+  const ownerId = await requireUserId();
+  const parsed = z
+    .array(customVariableSchema)
+    .max(MAX_CUSTOM_VARIABLES, `Hasta ${MAX_CUSTOM_VARIABLES} variables`)
+    .parse(variables);
+
+  const names = parsed.map((variable) => variable.name.toLowerCase());
+  if (new Set(names).size !== names.length) throw new Error("Hay nombres de variable repetidos");
+  if (names.some((name) => RESERVED_VARIABLE_NAMES.includes(name))) {
+    throw new Error(`«${RESERVED_VARIABLE_NAMES.join(", ")}» ya lo usa el link público`);
+  }
+
+  const survey = await prisma.survey.findFirst({
+    where: { id: surveyId, ownerId },
+    select: { slug: true },
+  });
+  if (!survey) throw new Error("Encuesta no encontrada");
+
+  await prisma.survey.update({
+    where: { id: surveyId, ownerId },
+    data: {
+      customVariables: parsed.map((variable) => ({
+        name: variable.name,
+        label: variable.label || undefined,
+      })),
+    },
+  });
+
+  revalidatePath(`/surveys/${surveyId}/publish`);
+  revalidatePath(`/surveys/${surveyId}/results`);
+  revalidatePath(`/s/${survey.slug}`);
+}
+
 /** SurveyMonkey-style “Hacer una copia”: clone survey + questions + edges (no responses). */
 export async function duplicateSurvey(surveyId: string): Promise<string> {
   const ownerId = await requireUserId();
@@ -164,6 +206,10 @@ export async function duplicateSurvey(surveyId: string): Promise<string> {
       responseLimit: null,
       cutoffAt: null,
       analysisViews: [],
+      customVariables: parseCustomVariables(survey.customVariables).map((variable) => ({
+        name: variable.name,
+        label: variable.label || undefined,
+      })),
     },
   });
 

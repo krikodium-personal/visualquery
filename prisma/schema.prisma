@@ -68,6 +68,9 @@ model Survey {
   // Saved Análisis views (filters + compare groups), JSON array.
   analysisViews Json @default("[]")
 
+  // URL parameters captured with each response: [{ name, label? }].
+  customVariables Json @default("[]")
+
   questions Question[]
   edges     Edge[]
   responses Response[]
@@ -144,6 +147,10 @@ model Response {
   survey      Survey    @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   startedAt   DateTime  @default(now())
   completedAt DateTime?
+  // Respondent reached a "Descalificar" destination (kept apart from real results).
+  disqualified Boolean   @default(false)
+  // Values of the survey's custom variables read from the link, { name: value }.
+  variables    Json?
 
   answers Answer[]
 

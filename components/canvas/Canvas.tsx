@@ -137,6 +137,12 @@ function applyOptionLogic(
   options: QuestionOption[],
 ): Edge[] {
   let next = [...edges];
+  // An option that ends the survey / disqualifies has no outgoing branch.
+  for (const option of options) {
+    if (!option.action) continue;
+    const handle = `option-${option.value}`;
+    next = next.filter((edge) => !(edge.source === sourceQuestionId && edge.sourceHandle === handle));
+  }
   for (const [key, targetId] of Object.entries(optionLogic)) {
     if (!targetId) continue;
     const sourceOptionValue = key === "__default__" ? null : key;
