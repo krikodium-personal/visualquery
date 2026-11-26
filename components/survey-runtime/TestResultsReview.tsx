@@ -2,7 +2,7 @@
 
 import { Check, X } from "lucide-react";
 import type { AnswerValue } from "@/lib/flow-engine";
-import type { QuestionOption } from "@/lib/question-options";
+import { imageFrameStyle, type QuestionOption } from "@/lib/question-options";
 import {
   formatScorePercent,
   isScoredQuestion,
@@ -109,11 +109,14 @@ function OptionReviewRow({
         {showImage && option.imageUrl && (
           // Survey creator controls these external image URLs.
           // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={option.imageUrl}
-            alt=""
-            className="mb-2 aspect-video max-h-28 w-full rounded object-cover"
-          />
+          <div className="mb-2 aspect-video max-h-28 w-full overflow-hidden rounded">
+            <img
+              src={option.imageUrl}
+              alt=""
+              className="size-full object-cover"
+              style={imageFrameStyle(option)}
+            />
+          </div>
         )}
         <div className="flex items-start justify-between gap-3">
           <p className="min-w-0 text-sm leading-snug">{option.label}</p>

@@ -36,6 +36,9 @@ const optionSchema = z.object({
   value: z.string().min(1),
   label: z.string().min(1),
   imageUrl: optionalOptionImage,
+  imageFocusX: z.number().min(0).max(100).optional(),
+  imageFocusY: z.number().min(0).max(100).optional(),
+  imageZoom: z.number().min(1).max(4).optional(),
   kind: z
     .enum([
       "row",
@@ -72,6 +75,7 @@ const questionPayloadSchema = z.object({
 }).refine(
   (question) =>
     question.type === "multi_choice" ||
+    question.type === "image_choice" ||
     (question.minSelections === null &&
       question.maxSelections === null &&
       question.selectionErrorMessage === null),

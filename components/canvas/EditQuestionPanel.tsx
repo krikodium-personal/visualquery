@@ -164,8 +164,10 @@ function optionHeading(type: QuestionType): string {
     : "Opciones";
 }
 
-function stripScoring(options: QuestionOption[]): QuestionOption[] {
-  return options.map(({ isCorrect: _isCorrect, points: _points, ...rest }) => rest);
+function stripScoring(options: QuestionOption[], keepCorrect = false): QuestionOption[] {
+  return options.map(({ isCorrect, points: _points, ...rest }) =>
+    keepCorrect && isCorrect ? { ...rest, isCorrect } : rest,
+  );
 }
 
 function supportsOtherNone(type: QuestionType): boolean {
@@ -215,7 +217,8 @@ export function EditQuestionPanel({
         Boolean(initialValues?.scoringEnabled) && SCORABLE_TYPES.includes(nextType),
       );
       const nextRule = selectionRuleFor(initialValues);
-      setSelectionRule(nextRule);
+      // Image questions always carry a rule; older ones (single pick) read as "exactly 1".
+      setSelectionRule(nextType === "image_choice" && nextRule === "any" ? "exactly" : nextRule);
       setSelectionCount(initialValues?.minSelections ?? initialValues?.maxSelections ?? 1);
       setSelectionErrorMessage(initialValues?.selectionErrorMessage ?? "");
       setRequiredErrorMessage(initialValues?.requiredErrorMessage ?? "");
@@ -261,7 +264,7 @@ export function EditQuestionPanel({
     setOptionLogic({});
     if (!SCORABLE_TYPES.includes(nextType)) setScoringEnabled(false);
     if (nextType !== "multi_choice") {
-      setSelectionRule("any");
+      setSelectionRule(nextType === "image_choice" ? "exactly" : "any");
       setSelectionCount(1);
       setSelectionErrorMessage("");
     }
@@ -388,7 +391,8 @@ export function EditQuestionPanel({
           imageUrl: option.imageUrl?.trim() || undefined,
         };
         if (!allowScoring) {
-          delete cleaned.isCorrect;
+          // The correct image can be marked without scoring; points only apply to scored questions.
+          if (type !== "image_choice") delete cleaned.isCorrect;
           delete cleaned.points;
           return cleaned;
         }
@@ -450,7 +454,10 @@ export function EditQuestionPanel({
         (o) => o.kind !== "other" && o.kind !== "none",
       ).length;
       const normalizedCount = Math.max(1, Math.min(requestedCount, Math.max(1, choiceCount)));
-      const hasSelectionRule = type === "multi_choice" && selectionRule !== "any";
+      // Image choice follows the checkbox rules; it always has one (default: exactly 1).
+      const hasSelectionRule =
+        (type === "multi_choice" && selectionRule !== "any") ||
+        (type === "image_choice" && selectionRule !== "any");
       const nextScoring = scoringEnabled && SCORABLE_TYPES.includes(type);
       const cleanedLogic: Record<string, string | null> = {};
       for (const [key, target] of Object.entries(optionLogic)) {
@@ -461,7 +468,7 @@ export function EditQuestionPanel({
       await onSubmit({
         title: title.trim(),
         type,
-        options: nextScoring ? cleanedOptions : stripScoring(cleanedOptions),
+        options: nextScoring ? cleanedOptions : stripScoring(cleanedOptions, type === "image_choice"),
         required,
         scoringEnabled: nextScoring,
         minSelections: hasSelectionRule && selectionRule !== "at_most" ? normalizedCount : null,
@@ -720,7 +727,7 @@ export function EditQuestionPanel({
                 </div>
               ) : null}
 
-              {type === "multi_choice" && (
+              {(type === "multi_choice" || type === "image_choice") && (
                 <div className="flex flex-col gap-4 border-t pt-4">
                   <div className="flex flex-col gap-2">
                     <Label htmlFor="selection-rule">
@@ -735,7 +742,7 @@ export function EditQuestionPanel({
                         }
                         className="h-9 rounded-md border bg-background px-3 text-sm"
                       >
-                        <option value="any">Cualquier cantidad</option>
+                        {type === "multi_choice" && <option value="any">Cualquier cantidad</option>}
                         <option value="exactly">Exactamente</option>
                         <option value="at_least">Como mínimo</option>
                         <option value="at_most">Como máximo</option>
@@ -758,7 +765,11 @@ export function EditQuestionPanel({
                         id="selection-error-message"
                         value={selectionErrorMessage}
                         onChange={(event) => setSelectionErrorMessage(event.target.value)}
-                        placeholder="Por favor, seleccioná la cantidad indicada de opciones"
+                        placeholder={
+                          type === "image_choice"
+                            ? "Por favor, seleccioná la cantidad indicada de imágenes"
+                            : "Por favor, seleccioná la cantidad indicada de opciones"
+                        }
                       />
                     </div>
                   )}
@@ -1076,13 +1087,135 @@ function OptionEditor({
   return (
     <div ref={listRef} className="flex flex-col gap-2">
       <Label>{title}</Label>
+      {imageUrls && (
+        <p className="text-xs text-muted-foreground">
+          Marcá la o las opciones correctas. Los puntos se asignan aparte, con «Calificar esta
+          pregunta».
+        </p>
+      )}
+      <div className={cn(imageUrls ? "grid grid-cols-1 gap-3 sm:grid-cols-2" : "contents")}>
       {options.map((option, index) => {
         const pointsValue = option.isCorrect
           ? Math.max(1, option.points ?? 1)
           : (option.points ?? 0);
         const isSpecial = option.kind === "other" || option.kind === "none";
+        // Image options mirror the respondent view: a two-column grid of cards,
+        // each with its picture, label, correct-answer toggle and delete button.
+        const asCard = Boolean(imageUrls) && !isSpecial;
+        if (asCard) {
+          return (
+            <div
+              key={option.value}
+              className={cn(
+                "flex min-w-0 flex-col gap-2 rounded-lg border bg-muted/30 p-3",
+                option.isCorrect && "border-emerald-600 ring-1 ring-emerald-600",
+              )}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Opción {index + 1}
+                </span>
+                <div className="flex items-center gap-1">
+                  {onToggleCorrect && (
+                    <button
+                      type="button"
+                      onClick={() => onToggleCorrect(option.value)}
+                      aria-pressed={Boolean(option.isCorrect)}
+                      className={cn(
+                        "inline-flex h-7 items-center gap-1 rounded-md border px-2 text-xs font-medium",
+                        option.isCorrect
+                          ? "border-emerald-600 bg-emerald-600 text-white"
+                          : "border-muted-foreground/40 text-muted-foreground hover:bg-muted",
+                      )}
+                    >
+                      <Check className="size-3.5" strokeWidth={option.isCorrect ? 3 : 2} />
+                      {option.isCorrect ? "Correcta" : "Marcar correcta"}
+                    </button>
+                  )}
+                  {options.length > 1 && (
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="ghost"
+                      onClick={() => onRemove(option.value)}
+                      aria-label={`Eliminar ${option.label || `opción ${index + 1}`}`}
+                    >
+                      <X className="size-4" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <ImageSourceField
+                id={`option-image-${option.value}`}
+                value={option.imageUrl}
+                onChange={(imageUrl) =>
+                  onUpdate(option.value, { imageUrl: imageUrl ?? undefined })
+                }
+                previewFit="cover"
+                compact
+                videoAspect
+                framing={{
+                  focusX: option.imageFocusX,
+                  focusY: option.imageFocusY,
+                  zoom: option.imageZoom,
+                  onChange: ({ focusX, focusY, zoom }) =>
+                    onUpdate(option.value, {
+                      imageFocusX: focusX,
+                      imageFocusY: focusY,
+                      imageZoom: zoom,
+                    }),
+                }}
+              />
+              <Input
+                data-option-value={option.value}
+                value={option.label}
+                onChange={(event) => onUpdate(option.value, { label: event.target.value })}
+                onFocus={() => {
+                  if (isDefaultOptionLabel(option.label)) {
+                    onUpdate(option.value, { label: "" });
+                  }
+                }}
+                onKeyDown={(event) => handleLabelKeyDown(event, index)}
+                placeholder={`Texto de la opción ${index + 1}`}
+                required
+              />
+              {scoring && onAdjustPoints && onSetPoints && (
+                <div className="flex items-center gap-1 self-start rounded-md border px-1.5 py-0.5">
+                  <span className="px-1 text-xs font-medium text-muted-foreground">Puntos</span>
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="ghost"
+                    onClick={() => onAdjustPoints(option.value, -1)}
+                    disabled={pointsValue <= 0}
+                    aria-label="Restar punto"
+                  >
+                    <Minus className="size-3.5" />
+                  </Button>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    value={String(pointsValue)}
+                    onChange={(event) => onSetPoints(option.value, event.target.value)}
+                    aria-label={`Puntos para ${option.label || `opción ${index + 1}`}`}
+                    className="h-7 w-12 px-1 text-center text-sm tabular-nums"
+                  />
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="ghost"
+                    onClick={() => onAdjustPoints(option.value, 1)}
+                    aria-label="Sumar punto"
+                  >
+                    <Plus className="size-3.5" />
+                  </Button>
+                </div>
+              )}
+            </div>
+          );
+        }
         return (
-          <div key={option.value} className="flex flex-wrap items-start gap-2 sm:flex-nowrap">
+          <div key={option.value} className="flex flex-wrap items-start gap-2 sm:flex-nowrap sm:col-span-2">
             {scoring && onToggleCorrect && !isSpecial && (
               <button
                 type="button"
@@ -1113,17 +1246,6 @@ function OptionEditor({
                 placeholder={`Opción ${index + 1}`}
                 required={!isSpecial}
               />
-              {imageUrls && !isSpecial && (
-                <ImageSourceField
-                  id={`option-image-${option.value}`}
-                  value={option.imageUrl}
-                  onChange={(imageUrl) =>
-                    onUpdate(option.value, { imageUrl: imageUrl ?? undefined })
-                  }
-                  previewFit="cover"
-                  compact
-                />
-              )}
             </div>
             {scoring && onAdjustPoints && onSetPoints && !isSpecial && (
               <div className="mt-0.5 flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5">
@@ -1171,6 +1293,7 @@ function OptionEditor({
           </div>
         );
       })}
+      </div>
       <Button type="button" size="sm" variant="outline" onClick={onAdd}>
         <Plus className="size-3.5" /> Agregar
       </Button>

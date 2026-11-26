@@ -104,6 +104,8 @@ const designSchema = z.object({
   welcomeButtonLabel: optionalText,
   thankYouTitle: optionalText,
   thankYouText: optionalText,
+  thankYouImageUrl: optionalImageSource("La imagen de la pantalla final"),
+  thankYouImageMode: z.enum(["header", "background"]),
 });
 
 export type SurveyDesignInput = z.input<typeof designSchema>;

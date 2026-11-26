@@ -230,14 +230,10 @@ export function Canvas({
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [dirty, setDirty] = useState(false);
   const [applying, setApplying] = useState(false);
-  const [previewOpen, setPreviewOpen] = useState(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      return window.localStorage.getItem(CANVAS_PREVIEW_OPEN_KEY) === "1";
-    } catch {
-      return false;
-    }
-  });
+  // Starts closed on server and client alike; the saved choice is restored after
+  // mount so the first client render matches the server HTML (no hydration error).
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewPrefLoaded, setPreviewPrefLoaded] = useState(false);
   const [previewRunKey, setPreviewRunKey] = useState(0);
   const [previewFocusQuestionId, setPreviewFocusQuestionId] = useState<string | null>(null);
   const lastPreviewQuestionRef = useRef<string | null>(null);
@@ -758,11 +754,23 @@ export function Canvas({
 
   useEffect(() => {
     try {
+      if (window.localStorage.getItem(CANVAS_PREVIEW_OPEN_KEY) === "1") {
+        setPreviewOpen(true);
+      }
+    } catch {
+      /* ignore private mode */
+    }
+    setPreviewPrefLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!previewPrefLoaded) return;
+    try {
       window.localStorage.setItem(CANVAS_PREVIEW_OPEN_KEY, previewOpen ? "1" : "0");
     } catch {
       /* ignore quota / private mode */
     }
-  }, [previewOpen]);
+  }, [previewOpen, previewPrefLoaded]);
 
   useEffect(() => {
     if (!previewOpen) {
@@ -783,6 +791,22 @@ export function Canvas({
     },
     [jumpToQuestion],
   );
+
+  // Selecting a node on the canvas always moves the open preview to it. Changes
+  // that originate from the preview itself already updated the ref, so they
+  // don't bounce back here.
+  const selectedQuestionId = useMemo(
+    () => nodes.find((node) => node.selected)?.id ?? null,
+    [nodes],
+  );
+  useEffect(() => {
+    if (!previewOpen || !selectedQuestionId) return;
+    if (selectedQuestionId === lastPreviewQuestionRef.current) return;
+    if (!orderedQuestions.some((question) => question.id === selectedQuestionId)) return;
+    lastPreviewQuestionRef.current = selectedQuestionId;
+    setFocusQuestionId(selectedQuestionId);
+    setPreviewFocusQuestionId(selectedQuestionId);
+  }, [previewOpen, selectedQuestionId, orderedQuestions]);
 
   const resolvePreviewStartId = useCallback(() => {
     const selectedId = nodesRef.current.find((node) => node.selected)?.id ?? null;

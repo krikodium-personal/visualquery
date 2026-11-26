@@ -49,7 +49,7 @@ export function SurveyRowActions({
       try {
         const newId = await duplicateSurvey(surveyId);
         toast.success("Copia creada");
-        router.push(`/surveys/${newId}/questions`);
+        router.push(`/surveys/${newId}/design`);
         router.refresh();
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "No se pudo copiar");
@@ -90,7 +90,7 @@ export function SurveyRowActions({
 
           <DropdownMenuItem
             className="cursor-pointer px-2 py-2"
-            onClick={() => router.push(`/surveys/${surveyId}/questions`)}
+            onClick={() => router.push(`/surveys/${surveyId}/design`)}
           >
             Editar encuesta
           </DropdownMenuItem>

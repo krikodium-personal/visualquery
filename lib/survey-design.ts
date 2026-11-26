@@ -27,6 +27,7 @@ export type FontFamily =
   | "merriweather";
 export type ButtonShape = "rounded" | "pill" | "square";
 export type BackgroundImageScope = "cover" | "all";
+export type ThankYouImageMode = "header" | "background";
 export type ThemePreset =
   | "modern"
   | "classic"
@@ -77,6 +78,9 @@ export interface SurveyDesign {
   welcomeButtonLabel: string | null;
   thankYouTitle: string | null;
   thankYouText: string | null;
+  /** Optional image for the final screen: card header or full-screen background. */
+  thankYouImageUrl: string | null;
+  thankYouImageMode: ThankYouImageMode;
 }
 
 export const DESIGN_DEFAULTS = {
@@ -343,6 +347,18 @@ export const BACKGROUND_IMAGE_SCOPE_OPTIONS: {
   { value: "cover", label: "Sólo en la portada" },
   { value: "all", label: "En todas las pantallas" },
 ];
+
+export const THANK_YOU_IMAGE_MODE_OPTIONS: {
+  value: ThankYouImageMode;
+  label: string;
+}[] = [
+  { value: "header", label: "Encabezado de la tarjeta" },
+  { value: "background", label: "Fondo de toda la pantalla" },
+];
+
+export function parseThankYouImageMode(value: string): ThankYouImageMode {
+  return value === "background" ? "background" : "header";
+}
 
 export function parseBackgroundImageScope(value: string): BackgroundImageScope {
   return value === "cover" ? "cover" : "all";

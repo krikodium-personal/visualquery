@@ -55,7 +55,7 @@ export async function submitAnswer(
   });
   if (!question) throw new Error("Pregunta no válida");
 
-  if (question.type === "multi_choice") {
+  if (question.type === "multi_choice" || (question.type === "image_choice" && Array.isArray(value))) {
     const selections = Array.isArray(value) ? [...new Set(value.map(String))] : [];
     const belowMinimum =
       question.minSelections !== null && selections.length < question.minSelections;

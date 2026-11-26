@@ -24,6 +24,7 @@ import type { QuestionOption } from "@/lib/question-options";
 import {
   ADVANCE_MODE_OPTIONS,
   BACKGROUND_IMAGE_SCOPE_OPTIONS,
+  THANK_YOU_IMAGE_MODE_OPTIONS,
   BUTTON_SHAPE_OPTIONS,
   COLOR_MODE_OPTIONS,
   DESIGN_DEFAULTS,
@@ -37,6 +38,7 @@ import {
   THEME_PRESETS,
   type AdvanceMode,
   type BackgroundImageScope,
+  type ThankYouImageMode,
   type ButtonShape,
   type ColorMode,
   type FontFamily,
@@ -134,6 +136,8 @@ export function DesignForm({
           welcomeButtonLabel: values.welcomeButtonLabel ?? "",
           thankYouTitle: values.thankYouTitle ?? "",
           thankYouText: values.thankYouText ?? "",
+          thankYouImageUrl: values.thankYouImageUrl ?? "",
+          thankYouImageMode: values.thankYouImageMode,
         });
         toast.success("Diseño guardado");
       } catch (error) {
@@ -638,6 +642,40 @@ export function DesignForm({
                   placeholder={DESIGN_DEFAULTS.thankYouText}
                 />
               </div>
+              <ImageSourceField
+                id="thankYouImageUrl"
+                label="Imagen de la pantalla final"
+                value={values.thankYouImageUrl}
+                onChange={(value) => set("thankYouImageUrl", value)}
+                previewFit="cover"
+              />
+              {values.thankYouImageUrl && (
+                <div className="flex flex-col gap-2">
+                  <Label>Usar la imagen como</Label>
+                  <Select
+                    value={values.thankYouImageMode}
+                    onValueChange={(value) =>
+                      set("thankYouImageMode", value as ThankYouImageMode)
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue>
+                        {(value) =>
+                          THANK_YOU_IMAGE_MODE_OPTIONS.find((option) => option.value === value)
+                            ?.label ?? String(value)
+                        }
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {THANK_YOU_IMAGE_MODE_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </CardContent>
           </Card>
 

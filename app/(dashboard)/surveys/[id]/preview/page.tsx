@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { parseOptions } from "@/lib/question-options";
 import {
   parseBackgroundImageScope,
+  parseThankYouImageMode,
   parseButtonShape,
   parseColorMode,
   parseFontFamily,
@@ -83,6 +84,8 @@ export default async function SurveyPreviewPage({
         welcomeButtonLabel: survey.welcomeButtonLabel,
         thankYouTitle: survey.thankYouTitle,
         thankYouText: survey.thankYouText,
+        thankYouImageUrl: survey.thankYouImageUrl,
+        thankYouImageMode: parseThankYouImageMode(survey.thankYouImageMode),
       }}
     />
   );

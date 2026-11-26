@@ -57,6 +57,8 @@ model Survey {
 
   thankYouTitle String?
   thankYouText  String?
+  thankYouImageUrl  String?
+  thankYouImageMode String @default("header") // header | background
 
   // Collector options (web link) — SurveyMonkey-style access controls.
   accessPassword String?

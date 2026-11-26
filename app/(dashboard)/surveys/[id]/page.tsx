@@ -6,5 +6,5 @@ export default async function SurveyIndexPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  redirect(`/surveys/${id}/questions`);
+  redirect(`/surveys/${id}/design`);
 }

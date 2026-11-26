@@ -27,7 +27,9 @@ export function questionMaxPoints(question: ScorableQuestion): number {
   if (!isScoredQuestion(question)) return 0;
 
   const points = question.options.map(optionPoints);
-  if (question.type === "multi_choice") {
+  const severalCorrectImages =
+    question.type === "image_choice" && points.filter((value) => value > 0).length > 1;
+  if (question.type === "multi_choice" || severalCorrectImages) {
     // Sum of all correct option points (partial-credit max).
     return points.reduce((sum, value) => sum + value, 0);
   }
@@ -37,7 +39,8 @@ export function questionMaxPoints(question: ScorableQuestion): number {
 
 export function selectedOptionValues(type: QuestionType, value: AnswerValue | undefined): string[] {
   if (value === undefined || value === null) return [];
-  if (type === "multi_choice") {
+  // Multi-choice, and image questions that ask for several images, store arrays.
+  if (type === "multi_choice" || Array.isArray(value)) {
     return Array.isArray(value) ? [...new Set(value.map(String))] : [];
   }
   if (typeof value === "string" && value !== "") return [value];

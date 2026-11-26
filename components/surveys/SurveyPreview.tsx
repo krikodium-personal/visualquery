@@ -417,7 +417,7 @@ export function SurveyPreview({
             variant="outline"
             size="sm"
             nativeButton={false}
-            render={<Link href={`/surveys/${surveyId}/questions`} />}
+            render={<Link href={`/surveys/${surveyId}/design`} />}
           >
             Editar encuesta
           </Button>

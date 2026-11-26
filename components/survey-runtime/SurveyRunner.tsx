@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { QuestionOption } from "@/lib/question-options";
+import { imageFrameStyle, type QuestionOption } from "@/lib/question-options";
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
 import {
   computeProgress,
@@ -25,6 +25,7 @@ import {
   readableTextOn,
   runnerBackgroundColor,
   type SurveyDesign,
+  type ThankYouImageMode,
 } from "@/lib/survey-design";
 import { cn } from "@/lib/utils";
 import { QUESTION_TYPE_INSTRUCTIONS, type QuestionType } from "@/lib/question-types";
@@ -301,7 +302,14 @@ export function SurveyRunner({
     }
 
     return (
-      <CenteredCard {...shell}>
+      <CenteredCard
+        {...shell}
+        finalImage={
+          design.thankYouImageUrl
+            ? { url: design.thankYouImageUrl, mode: design.thankYouImageMode }
+            : undefined
+        }
+      >
         <h2 className="text-xl font-semibold">
           {design.thankYouTitle || DESIGN_DEFAULTS.thankYouTitle}
         </h2>
@@ -387,7 +395,7 @@ export function SurveyRunner({
       <h2 className="text-3xl font-bold leading-tight tracking-tight">{currentQuestion.title}</h2>
 
       <p className="-mt-2 text-sm text-muted-foreground">
-        {QUESTION_TYPE_INSTRUCTIONS[currentQuestion.type]}
+        {imageInstruction(currentQuestion) ?? QUESTION_TYPE_INSTRUCTIONS[currentQuestion.type]}
       </p>
 
       {(() => {
@@ -396,7 +404,10 @@ export function SurveyRunner({
           currentQuestion.options.some((option) => option.kind === "other");
         const tapEligible =
           currentQuestion.type === "single_choice" ||
-          currentQuestion.type === "image_choice" ||
+          // Image questions tap-to-advance only when they ask for an exact count.
+          (currentQuestion.type === "image_choice" &&
+            (!imageUsesSelectionRules(currentQuestion) ||
+              currentQuestion.minSelections === currentQuestion.maxSelections)) ||
           currentQuestion.type === "dropdown" ||
           (currentQuestion.type === "rating" && !ratingHasOther);
         const autoAdvances = design.advanceMode === "tap" && tapEligible;
@@ -435,6 +446,7 @@ function CenteredCard({
   design,
   cover = false,
   wide = false,
+  finalImage,
   children,
 }: {
   title?: string;
@@ -444,6 +456,8 @@ function CenteredCard({
   cover?: boolean;
   /** Slightly wider card for the test-results review. */
   wide?: boolean;
+  /** Final-screen image: a card header or the full-screen background. */
+  finalImage?: { url: string; mode: ThankYouImageMode };
   children: React.ReactNode;
 }) {
   const { atTop, alignClass } = logoPlacement(design.logoPosition);
@@ -465,6 +479,14 @@ function CenteredCard({
       />
     </div>
   );
+
+  const backgroundUrl =
+    finalImage?.mode === "background"
+      ? finalImage.url
+      : design.backgroundImageUrl &&
+          (design.backgroundImageScope === "all" || cover)
+        ? design.backgroundImageUrl
+        : null;
 
   return (
     <div
@@ -490,11 +512,11 @@ function CenteredCard({
     >
       <SurveyFontLoader fontFamily={design.fontFamily} />
       {/* Background image stays put while the questions change. */}
-      {design.backgroundImageUrl && (design.backgroundImageScope === "all" || cover) && (
+      {backgroundUrl && (
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 bg-cover bg-center bg-no-repeat"
-          style={{ backgroundImage: `url(${design.backgroundImageUrl})` }}
+          style={{ backgroundImage: `url("${backgroundUrl}")` }}
         />
       )}
 
@@ -508,6 +530,10 @@ function CenteredCard({
             design.surfaceStyle === "glass" && "survey-response-card--glass",
           )}
         >
+          {finalImage?.mode === "header" && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={finalImage.url} alt="" className="h-40 w-full object-cover" />
+          )}
           {atTop && smallLogo}
           {(title || headerAction) && (
             <CardHeader className="flex flex-row items-center justify-between gap-2">
@@ -535,6 +561,26 @@ function asRecord(value: AnswerValue): Record<string, string | number> {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value : {};
 }
 
+/**
+ * Image questions follow the checkbox rules once they carry selection limits
+ * (exactly / at least / at most). Older ones without limits stay single-pick.
+ */
+function imageUsesSelectionRules(question: RuntimeQuestion): boolean {
+  return (
+    question.type === "image_choice" &&
+    (question.minSelections != null || question.maxSelections != null)
+  );
+}
+
+function imageInstruction(question: RuntimeQuestion): string | null {
+  if (!imageUsesSelectionRules(question)) return null;
+  const { minSelections: min, maxSelections: max } = question;
+  const images = (n: number) => (n === 1 ? "una imagen" : `${n} imágenes`);
+  if (min != null && min === max) return `Selecciona ${images(min)}`;
+  if (min != null) return `Selecciona al menos ${images(min)}`;
+  return `Selecciona como máximo ${images(max ?? 1)}`;
+}
+
 function isAnswerComplete(question: RuntimeQuestion, value: AnswerValue): boolean {
   if (isEmpty(value)) return false;
   if (question.type === "rating") {
@@ -545,7 +591,7 @@ function isAnswerComplete(question: RuntimeQuestion, value: AnswerValue): boolea
     }
     return false;
   }
-  if (question.type === "multi_choice") {
+  if (question.type === "multi_choice" || (question.type === "image_choice" && Array.isArray(value))) {
     const count = Array.isArray(value) ? value.length : 0;
     if (question.minSelections != null && count < question.minSelections) return false;
     if (question.maxSelections != null && count > question.maxSelections) return false;
@@ -983,26 +1029,72 @@ function QuestionInput({
   }
 
   if (question.type === "image_choice") {
+    const multi = imageUsesSelectionRules(question);
+    const selectedMany = Array.isArray(value) ? value : [];
     const selected = typeof value === "string" ? value : null;
+    const reachedMaximum = multi && question.maxSelections != null && selectedMany.length >= question.maxSelections;
+    const meetsMinimum =
+      !multi || question.minSelections == null || selectedMany.length >= question.minSelections;
+    const validationMessage =
+      question.selectionErrorMessage ||
+      (question.minSelections != null && question.minSelections === question.maxSelections
+        ? `Seleccioná exactamente ${question.minSelections} ${question.minSelections === 1 ? "imagen" : "imágenes"}.`
+        : question.minSelections != null
+          ? `Seleccioná al menos ${question.minSelections} ${question.minSelections === 1 ? "imagen" : "imágenes"}.`
+          : question.maxSelections != null
+            ? `Seleccioná como máximo ${question.maxSelections} ${question.maxSelections === 1 ? "imagen" : "imágenes"}.`
+            : "");
+    const isChecked = (optionValue: string) =>
+      multi ? selectedMany.includes(optionValue) : selected === optionValue;
+    const handlePick = (optionValue: string) => {
+      if (!multi) {
+        pick(optionValue);
+        return;
+      }
+      let next: string[];
+      if (selectedMany.includes(optionValue)) {
+        next = selectedMany.filter((item) => item !== optionValue);
+      } else if (question.maxSelections === 1) {
+        // Pick-one rule: tapping another image swaps the selection.
+        next = [optionValue];
+      } else {
+        next = [...selectedMany, optionValue];
+      }
+      // Tap mode sends as soon as an exact count is met.
+      if (autoAdvance && next.length === question.minSelections) onSelect(next);
+      else onChange(next);
+    };
     return (
+      <div className="flex flex-col gap-2">
       <div className="grid grid-cols-2 gap-3">
-        {displayOptions.map((option) => (
+        {displayOptions.map((option) => {
+          const checked = isChecked(option.value);
+          const blocked = reachedMaximum && !checked && question.maxSelections !== 1;
+          return (
           <button
             key={option.value}
             type="button"
-            disabled={disabled}
-            onClick={() => pick(option.value)}
-            style={selected === option.value ? selectedStyle : undefined}
+            disabled={disabled || blocked}
+            onClick={() => handlePick(option.value)}
+            style={checked ? selectedStyle : undefined}
             className={cn(
               "survey-option-surface overflow-hidden border text-left hover:bg-muted",
               shapeClass,
-              selected === option.value && "bg-muted",
+              checked && "bg-muted",
+              blocked && "cursor-not-allowed opacity-45",
             )}
           >
             {option.imageUrl ? (
-              // The survey creator controls these external image URLs.
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={option.imageUrl} alt="" className="aspect-video w-full object-cover" />
+              <div className="aspect-video w-full overflow-hidden">
+                {/* The survey creator controls these external image URLs. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={option.imageUrl}
+                  alt=""
+                  className="size-full object-cover"
+                  style={imageFrameStyle(option)}
+                />
+              </div>
             ) : (
               <div className="flex aspect-video items-center justify-center bg-muted text-xs text-muted-foreground">
                 Sin imagen
@@ -1010,7 +1102,17 @@ function QuestionInput({
             )}
             <span className="block px-3 py-2 text-sm">{option.label}</span>
           </button>
-        ))}
+          );
+        })}
+      </div>
+      {reachedMaximum && question.maxSelections !== 1 && (
+        <p className="text-xs font-medium text-muted-foreground" role="status">
+          Alcanzaste el máximo de {question.maxSelections} imágenes.
+        </p>
+      )}
+      {multi && !meetsMinimum && selectedMany.length > 0 && validationMessage && (
+        <p className="text-xs text-destructive" role="alert">{validationMessage}</p>
+      )}
       </div>
     );
   }

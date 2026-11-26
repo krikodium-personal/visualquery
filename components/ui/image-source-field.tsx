@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ImageUp, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -67,6 +67,8 @@ export function ImageSourceField({
   onChange,
   previewFit = "contain",
   compact = false,
+  videoAspect = false,
+  framing,
 }: {
   id: string;
   label?: string;
@@ -75,10 +77,47 @@ export function ImageSourceField({
   previewFit?: "contain" | "cover";
   /** Smaller preview + denser layout for option rows. */
   compact?: boolean;
+  /** 16:9 preview (and empty placeholder) matching how the respondent sees it. */
+  videoAspect?: boolean;
+  /** When set, the preview can be dragged to frame the visible part, with a zoom slider. */
+  framing?: {
+    focusX?: number;
+    focusY?: number;
+    zoom?: number;
+    onChange: (frame: { focusX: number; focusY: number; zoom: number }) => void;
+  };
 }) {
   const [converting, setConverting] = useState(false);
   const current = value?.trim() || null;
   const uploadedImage = current?.startsWith("data:image/") ?? false;
+
+  const dragRef = useRef<{ x: number; y: number; fx: number; fy: number } | null>(null);
+  const frameX = framing?.focusX ?? 50;
+  const frameY = framing?.focusY ?? 50;
+  const frameZoom = framing?.zoom ?? 1;
+  const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
+
+  const handleFramePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!framing) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = { x: event.clientX, y: event.clientY, fx: frameX, fy: frameY };
+  };
+  const handleFramePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const start = dragRef.current;
+    if (!framing || !start) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    // Dragging right reveals the left side of the picture, like moving the image itself.
+    const dx = ((event.clientX - start.x) / rect.width) * 100;
+    const dy = ((event.clientY - start.y) / rect.height) * 100;
+    framing.onChange({
+      focusX: Math.round(clamp(start.fx - dx, 0, 100)),
+      focusY: Math.round(clamp(start.fy - dy, 0, 100)),
+      zoom: frameZoom,
+    });
+  };
+  const endFrameDrag = () => {
+    dragRef.current = null;
+  };
 
   const handleUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -113,16 +152,37 @@ export function ImageSourceField({
 
       {current ? (
         <div className="relative overflow-hidden rounded-md border bg-muted/40">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={current}
-            alt={label ? `Vista previa de ${label.toLocaleLowerCase("es")}` : "Vista previa"}
+          <div
             className={cn(
-              "w-full",
-              compact ? "h-24" : "h-32",
-              previewFit === "cover" ? "object-cover" : "object-contain p-3",
+              "overflow-hidden",
+              framing && "cursor-grab touch-none select-none active:cursor-grabbing",
             )}
-          />
+            onPointerDown={handleFramePointerDown}
+            onPointerMove={handleFramePointerMove}
+            onPointerUp={endFrameDrag}
+            onPointerCancel={endFrameDrag}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={current}
+              alt={label ? `Vista previa de ${label.toLocaleLowerCase("es")}` : "Vista previa"}
+              draggable={false}
+              className={cn(
+                "w-full",
+                videoAspect ? "aspect-video" : compact ? "h-24" : "h-32",
+                previewFit === "cover" ? "object-cover" : "object-contain p-3",
+              )}
+              style={
+                framing
+                  ? {
+                      objectPosition: `${frameX}% ${frameY}%`,
+                      transformOrigin: `${frameX}% ${frameY}%`,
+                      transform: frameZoom === 1 ? undefined : `scale(${frameZoom})`,
+                    }
+                  : undefined
+              }
+            />
+          </div>
           <Button
             type="button"
             size="icon-sm"
@@ -133,6 +193,42 @@ export function ImageSourceField({
           >
             <X className="size-4" />
           </Button>
+        </div>
+      ) : videoAspect ? (
+        <div className="flex aspect-video items-center justify-center rounded-md border bg-muted text-xs text-muted-foreground">
+          Sin imagen
+        </div>
+      ) : null}
+
+      {framing && current ? (
+        <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+          <span>Arrastrá la imagen para encuadrarla</span>
+          <div className="flex items-center gap-2">
+            <span className="shrink-0">Zoom</span>
+            <input
+              type="range"
+              min={1}
+              max={3}
+              step={0.05}
+              value={frameZoom}
+              onChange={(event) =>
+                framing.onChange({
+                  focusX: frameX,
+                  focusY: frameY,
+                  zoom: Number(event.target.value),
+                })
+              }
+              aria-label="Zoom de la imagen"
+              className="h-4 min-w-0 flex-1 cursor-pointer accent-foreground"
+            />
+            <button
+              type="button"
+              className="shrink-0 underline-offset-2 hover:underline"
+              onClick={() => framing.onChange({ focusX: 50, focusY: 50, zoom: 1 })}
+            >
+              Restablecer
+            </button>
+          </div>
         </div>
       ) : null}
 
@@ -163,18 +259,24 @@ export function ImageSourceField({
         />
       </div>
 
-      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-        <span className="h-px flex-1 bg-border" />
-        o URL
-        <span className="h-px flex-1 bg-border" />
-      </div>
+      {!compact && (
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <span className="h-px flex-1 bg-border" />
+          o URL
+          <span className="h-px flex-1 bg-border" />
+        </div>
+      )}
       <Input
         id={id}
         type="url"
         value={uploadedImage ? "" : current ?? ""}
         onChange={(event) => onChange(event.target.value || null)}
         placeholder={
-          uploadedImage ? "Imagen subida desde archivo" : "https://tusitio.com/imagen.png"
+          uploadedImage
+            ? "Imagen subida desde archivo"
+            : compact
+              ? "o pegá una URL de imagen"
+              : "https://tusitio.com/imagen.png"
         }
       />
     </div>

@@ -54,7 +54,7 @@ export function SurveyCard({
 
       <div className="min-w-0 flex-1 basis-full sm:basis-auto">
         <Link
-          href={`/surveys/${id}/questions`}
+          href={`/surveys/${id}/design`}
           className="block truncate text-base font-semibold text-foreground hover:underline"
         >
           {title}

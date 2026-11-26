@@ -13,8 +13,8 @@ import {
 import { cn } from "@/lib/utils";
 
 const STEPS = [
-  { slug: "questions", label: "Preguntas" },
   { slug: "design", label: "Diseño" },
+  { slug: "questions", label: "Preguntas" },
   { slug: "publish", label: "Publicación" },
   { slug: "results", label: "Análisis" },
 ] as const;

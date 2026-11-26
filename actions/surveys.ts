@@ -42,7 +42,7 @@ export async function createSurvey(_prevState: { error?: string } | undefined, f
     },
   });
 
-  redirect(`/surveys/${survey.id}/questions`);
+  redirect(`/surveys/${survey.id}/design`);
 }
 
 export async function deleteSurvey(surveyId: string) {
