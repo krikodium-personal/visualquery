@@ -12,6 +12,10 @@ import {
   imageFrameStyle,
   matrixCellKey,
   matrixRowCount,
+  orderOptions,
+  readChoiceAnswer,
+  readOtherConfig,
+  validateOtherText,
   type QuestionOption,
 } from "@/lib/question-options";
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
@@ -74,21 +78,9 @@ type RuntimeQuestion = {
   requiredErrorMessage?: string | null;
   description?: string | null;
   randomizeOptions?: boolean;
+  orderMode?: string | null;
+  keepLastOption?: boolean;
 };
-
-function shuffleOptions(options: QuestionOption[], seed: string): QuestionOption[] {
-  const specials = options.filter((o) => o.kind === "other" || o.kind === "none");
-  const normals = options.filter((o) => o.kind !== "other" && o.kind !== "none");
-  let hash = 0;
-  for (let i = 0; i < seed.length; i += 1) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
-  const copy = [...normals];
-  for (let i = copy.length - 1; i > 0; i -= 1) {
-    hash = (hash * 1664525 + 1013904223) >>> 0;
-    const j = hash % (i + 1);
-    [copy[i], copy[j]] = [copy[j]!, copy[i]!];
-  }
-  return [...copy, ...specials];
-}
 
 function initialAnswer(question: RuntimeQuestion | undefined): AnswerValue {
   if (question?.type === "slider") return 50;
@@ -417,7 +409,9 @@ export function SurveyRunner({
           (currentQuestion.type === "image_choice" &&
             (!imageUsesSelectionRules(currentQuestion) ||
               currentQuestion.minSelections === currentQuestion.maxSelections)) ||
-          currentQuestion.type === "dropdown" ||
+          // A dropdown with «Otra» may need free text, so it waits for «Siguiente».
+          (currentQuestion.type === "dropdown" &&
+            !currentQuestion.options.some((option) => option.kind === "other")) ||
           (currentQuestion.type === "rating" && !ratingHasOther);
         const autoAdvances = design.advanceMode === "tap" && tapEligible;
         return (
@@ -431,6 +425,7 @@ export function SurveyRunner({
               disabled={submitting}
               themeColor={design.themeColor}
               shapeClass={shapeClass}
+              orderSeed={`${currentQuestion.id}:${responseId ?? "preview"}`}
             />
             <p className="text-xs text-muted-foreground">
               {imageInstruction(currentQuestion) ??
@@ -623,6 +618,19 @@ function isAnswerComplete(question: RuntimeQuestion, value: AnswerValue): boolea
     if (question.minSelections != null && count < question.minSelections) return false;
     if (question.maxSelections != null && count > question.maxSelections) return false;
   }
+  if (question.type === "dropdown") {
+    const otherOption = question.options.find((option) => option.kind === "other");
+    const { choice, other } = readChoiceAnswer(value);
+    if (!choice) return false;
+    if (!otherOption) return true;
+    const config = readOtherConfig(otherOption);
+    if (config.mode === "option") {
+      return choice !== otherOption.value || validateOtherText(other, config) === null;
+    }
+    // Comment-field mode: blank is fine unless the question is required.
+    if (!other.trim()) return !question.required;
+    return validateOtherText(other, config) === null;
+  }
   const record = asRecord(value);
   if (question.type === "dropdown_matrix") {
     const answered = countAnsweredMatrixRows(question.options, record);
@@ -791,6 +799,7 @@ function QuestionInput({
   disabled,
   themeColor,
   shapeClass,
+  orderSeed,
 }: {
   question: RuntimeQuestion;
   value: AnswerValue;
@@ -800,15 +809,19 @@ function QuestionInput({
   disabled: boolean;
   themeColor: string;
   shapeClass: string;
+  orderSeed: string;
 }) {
   const pick = autoAdvance ? onSelect : onChange;
   const selectedStyle = { borderColor: themeColor };
   const displayOptions = useMemo(
     () =>
-      question.randomizeOptions
-        ? shuffleOptions(question.options, question.id)
-        : question.options,
-    [question.id, question.options, question.randomizeOptions],
+      orderOptions(question.options, {
+        randomize: Boolean(question.randomizeOptions),
+        mode: question.orderMode ?? null,
+        keepLast: Boolean(question.keepLastOption),
+        seed: orderSeed,
+      }),
+    [question.options, question.randomizeOptions, question.orderMode, question.keepLastOption, orderSeed],
   );
 
   if (question.type === "text") {
@@ -925,27 +938,94 @@ function QuestionInput({
   }
 
   if (question.type === "dropdown") {
+    const otherOption = question.options.find((option) => option.kind === "other");
+    const config = readOtherConfig(otherOption);
+    const { choice, other } = readChoiceAnswer(value);
+    const listed =
+      otherOption && config.mode === "comment"
+        ? displayOptions.filter((option) => option.kind !== "other")
+        : displayOptions;
+    const showText =
+      Boolean(otherOption) && (config.mode === "comment" || choice === otherOption?.value);
+    const emit = (nextChoice: string, nextText: string) => {
+      if (!otherOption) {
+        pick(nextChoice);
+        return;
+      }
+      const carriesText =
+        nextText.trim() !== "" || (config.mode === "option" && nextChoice === otherOption.value);
+      onChange(carriesText ? { choice: nextChoice, other: nextText } : nextChoice);
+    };
+    const textProblem = showText && other.trim() ? validateOtherText(other, config) : null;
+    const blankHint =
+      showText && !other.trim() && (config.mode === "option" || question.required)
+        ? config.errorMessage
+        : null;
+    const widthStyle = { maxWidth: `${Math.max(config.size, 10) + 6}ch` };
     return (
-      <select
-        value={typeof value === "string" ? value : ""}
-        onChange={(event) => pick(event.target.value)}
-        disabled={disabled}
-        className={cn("h-10 w-full border bg-background px-3 text-sm", shapeClass)}
-      >
-        <option value="">Seleccioná una opción</option>
-        {displayOptions.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+      <div className="flex flex-col gap-2">
+        <select
+          value={choice}
+          onChange={(event) => emit(event.target.value, other)}
+          disabled={disabled}
+          className={cn("h-10 w-full border bg-background px-3 text-sm", shapeClass)}
+        >
+          <option value="">Seleccioná una opción</option>
+          {listed.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        {showText ? (
+          <>
+            {config.mode === "comment" ? (
+              <span className="text-sm">{otherOption?.label}</span>
+            ) : null}
+            {config.multiline ? (
+              <Textarea
+                value={other}
+                rows={3}
+                maxLength={2000}
+                style={widthStyle}
+                disabled={disabled}
+                className={shapeClass}
+                placeholder={config.mode === "option" ? "Especificá tu respuesta" : undefined}
+                onChange={(event) => emit(choice, event.target.value)}
+              />
+            ) : (
+              <Input
+                value={other}
+                maxLength={2000}
+                style={widthStyle}
+                disabled={disabled}
+                className={shapeClass}
+                placeholder={config.mode === "option" ? "Especificá tu respuesta" : undefined}
+                onChange={(event) => emit(choice, event.target.value)}
+              />
+            )}
+            {textProblem ? (
+              <p className="text-xs text-destructive" role="alert">
+                {textProblem}
+              </p>
+            ) : blankHint ? (
+              <p className="text-xs text-muted-foreground">{blankHint}</p>
+            ) : null}
+          </>
+        ) : null}
+      </div>
     );
   }
 
   if (question.type === "dropdown_matrix") {
     const record = asRecord(value);
     const allRows = question.options.filter((option) => option.kind === "row");
-    const rows = question.randomizeOptions ? shuffleOptions(allRows, question.id) : allRows;
+    const rows = orderOptions(allRows, {
+      randomize: Boolean(question.randomizeOptions),
+      mode: null,
+      keepLast: false,
+      seed: orderSeed,
+    });
     const columns = question.options.filter((option) => option.kind === "column");
     const choices = question.options.filter((option) => option.kind === "choice");
     const otherOption = question.options.find((option) => option.kind === "other");

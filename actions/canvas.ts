@@ -55,6 +55,17 @@ const optionSchema = z.object({
     ])
     .optional(),
   columnValue: z.string().optional(),
+  // «Otra» / comment field settings (dropdown): only meaningful on the option of kind "other".
+  otherMode: z.enum(["option", "comment"]).optional(),
+  otherMultiline: z.boolean().optional(),
+  otherSize: z.number().int().min(5).max(100).optional(),
+  otherValidation: z
+    .enum(["any", "text_length", "integer", "decimal", "date_us", "date_intl", "email"])
+    .optional(),
+  otherMinLength: z.number().int().min(0).max(2000).optional(),
+  otherMaxLength: z.number().int().min(1).max(2000).optional(),
+  otherErrorMessage: z.string().max(300).optional(),
+  otherInvalidMessage: z.string().max(300).optional(),
   isCorrect: z.boolean().optional(),
   points: z.number().int().nonnegative().optional(),
 });
@@ -75,6 +86,8 @@ const questionPayloadSchema = z.object({
   requiredErrorMessage: z.string().max(500).nullable(),
   description: z.string().max(1000).nullable(),
   randomizeOptions: z.boolean(),
+  orderMode: z.string().max(20).nullable(),
+  keepLastOption: z.boolean(),
 }).refine(
   (question) =>
     question.type === "multi_choice" ||
@@ -164,6 +177,8 @@ export async function applyCanvasChanges(
             requiredErrorMessage: q.requiredErrorMessage,
             description: q.description,
             randomizeOptions: q.randomizeOptions,
+            orderMode: q.orderMode,
+            keepLastOption: q.keepLastOption,
           },
         });
       }
@@ -186,6 +201,8 @@ export async function applyCanvasChanges(
             requiredErrorMessage: q.requiredErrorMessage,
             description: q.description,
             randomizeOptions: q.randomizeOptions,
+            orderMode: q.orderMode,
+            keepLastOption: q.keepLastOption,
           },
         });
         questionIdMap[q.id] = created.id;

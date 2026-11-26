@@ -108,6 +108,8 @@ export type SurveyQuestion = {
   requiredErrorMessage: string | null;
   description: string | null;
   randomizeOptions: boolean;
+  orderMode: string | null;
+  keepLastOption: boolean;
 };
 
 export type SurveyEdge = {
@@ -187,6 +189,8 @@ function buildInitialNodes(questions: SurveyQuestion[]): QuestionNode[] {
       requiredErrorMessage: q.requiredErrorMessage,
       description: q.description,
       randomizeOptions: q.randomizeOptions,
+      orderMode: q.orderMode,
+      keepLastOption: q.keepLastOption,
       onEdit: () => {},
       onDelete: () => {},
       onAddNext: () => {},
@@ -398,6 +402,8 @@ export function Canvas({
               requiredErrorMessage: n.data.requiredErrorMessage ?? null,
               description: n.data.description ?? null,
               randomizeOptions: n.data.randomizeOptions ?? false,
+              orderMode: n.data.orderMode ?? null,
+              keepLastOption: n.data.keepLastOption ?? false,
             })),
             edges: capturedEdges.map((e) => ({
               sourceQuestionId: e.source,
@@ -592,6 +598,8 @@ export function Canvas({
                   requiredErrorMessage: values.requiredErrorMessage,
                   description: values.description,
                   randomizeOptions: values.randomizeOptions,
+                  orderMode: values.orderMode,
+                  keepLastOption: values.keepLastOption,
                 },
               }
             : n,
@@ -657,6 +665,8 @@ export function Canvas({
           requiredErrorMessage: values.requiredErrorMessage,
           description: values.description,
           randomizeOptions: values.randomizeOptions,
+          orderMode: values.orderMode,
+          keepLastOption: values.keepLastOption,
           onEdit: () => {},
           onDelete: () => {},
           onAddNext: () => {},
@@ -922,6 +932,8 @@ export function Canvas({
         requiredErrorMessage: editingNode.data.requiredErrorMessage ?? null,
         description: editingNode.data.description ?? null,
         randomizeOptions: editingNode.data.randomizeOptions ?? false,
+        orderMode: editingNode.data.orderMode ?? null,
+        keepLastOption: editingNode.data.keepLastOption ?? false,
         optionLogic: Object.fromEntries(
           edges
             .filter((edge) => edge.source === editingNode.id)
@@ -958,6 +970,8 @@ export function Canvas({
         requiredErrorMessage: n.data.requiredErrorMessage ?? null,
         description: n.data.description ?? null,
         randomizeOptions: n.data.randomizeOptions ?? false,
+        orderMode: n.data.orderMode ?? null,
+        keepLastOption: n.data.keepLastOption ?? false,
       })),
     [nodes],
   );

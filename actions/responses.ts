@@ -2,7 +2,13 @@
 
 import { prisma } from "@/lib/prisma";
 import type { AnswerValue } from "@/lib/flow-engine";
-import { countAnsweredMatrixRows, parseOptions } from "@/lib/question-options";
+import {
+  countAnsweredMatrixRows,
+  parseOptions,
+  readChoiceAnswer,
+  readOtherConfig,
+  validateOtherText,
+} from "@/lib/question-options";
 
 async function assertSurveyAcceptingResponses(surveyId: string) {
   const survey = await prisma.survey.findFirst({
@@ -75,6 +81,24 @@ export async function submitAnswer(
       throw new Error(
         question.selectionErrorMessage || "La cantidad de filas respondidas no es válida",
       );
+    }
+  }
+
+  if (question.type === "dropdown") {
+    const options = parseOptions(question.options);
+    const otherOption = options.find((option) => option.kind === "other");
+    const { choice, other } = readChoiceAnswer(value);
+    if (choice && !options.some((option) => option.value === choice)) {
+      throw new Error("La opción elegida no es válida");
+    }
+    if (otherOption) {
+      const config = readOtherConfig(otherOption);
+      const needsText =
+        (config.mode === "option" && choice === otherOption.value) || other.trim() !== "";
+      if (needsText) {
+        const problem = validateOtherText(other, config);
+        if (problem) throw new Error(problem);
+      }
     }
   }
 

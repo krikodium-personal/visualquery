@@ -42,6 +42,8 @@ type PreviewQuestion = {
   requiredErrorMessage: string | null;
   description: string | null;
   randomizeOptions: boolean;
+  orderMode: string | null;
+  keepLastOption: boolean;
 };
 
 type OverviewQuestion = PreviewQuestion & { code: string };

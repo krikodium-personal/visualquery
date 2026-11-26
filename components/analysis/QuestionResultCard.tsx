@@ -28,7 +28,7 @@ import {
   type CountRow,
 } from "@/lib/analysis";
 import { ratingMaxFromOptions } from "@/lib/rating-options";
-import { answerKeyLabel } from "@/lib/question-options";
+import { answerKeyLabel, formatChoiceWithOther } from "@/lib/question-options";
 
 export function QuestionResultCard({
   question,
@@ -215,6 +215,8 @@ function formatAnswer(answer: AnalysisAnswerValue, labels: Map<string, string>):
       .map((value, index) => `${index + 1}. ${labels.get(value) ?? value}`)
       .join(" · ");
   }
+  const withOther = formatChoiceWithOther(answer, labels);
+  if (withOther !== null) return withOther;
   return Object.entries(answer)
     .map(([key, value]) => `${answerKeyLabel(key, labels)}: ${labels.get(String(value)) ?? value}`)
     .join(" · ");

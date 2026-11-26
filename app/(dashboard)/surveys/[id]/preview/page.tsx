@@ -45,6 +45,8 @@ export default async function SurveyPreviewPage({
     requiredErrorMessage: q.requiredErrorMessage,
     description: q.description,
     randomizeOptions: q.randomizeOptions,
+    orderMode: q.orderMode,
+    keepLastOption: q.keepLastOption,
   }));
 
   const edges = survey.edges.map((e) => ({

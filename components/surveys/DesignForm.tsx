@@ -64,6 +64,8 @@ type PreviewQuestion = {
   requiredErrorMessage?: string | null;
   description?: string | null;
   randomizeOptions?: boolean;
+  orderMode?: string | null;
+  keepLastOption?: boolean;
 };
 
 type FormState = SurveyDesign & { title: string; description: string | null };

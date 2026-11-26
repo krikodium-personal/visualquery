@@ -112,6 +112,8 @@ model Question {
   requiredErrorMessage  String?
   description           String?
   randomizeOptions      Boolean      @default(false)
+  orderMode             String? // "random" | "alphabetical" | "flip"; null = random
+  keepLastOption        Boolean      @default(false)
   createdAt             DateTime     @default(now())
   updatedAt             DateTime     @updatedAt
 

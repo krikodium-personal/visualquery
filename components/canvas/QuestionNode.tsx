@@ -33,6 +33,8 @@ export type QuestionNodeData = {
   requiredErrorMessage: string | null;
   description: string | null;
   randomizeOptions: boolean;
+  orderMode: string | null;
+  keepLastOption: boolean;
   onEdit: () => void;
   onDelete: () => void;
   onAddNext: () => void;

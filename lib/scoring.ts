@@ -1,5 +1,5 @@
 import type { AnswerValue } from "@/lib/flow-engine";
-import { optionPoints, type QuestionOption } from "@/lib/question-options";
+import { isChoiceWithOther, optionPoints, type QuestionOption } from "@/lib/question-options";
 import { SCORABLE_TYPES, type QuestionType } from "@/lib/question-types";
 
 export type ScorableQuestion = {
@@ -44,6 +44,7 @@ export function selectedOptionValues(type: QuestionType, value: AnswerValue | un
     return Array.isArray(value) ? [...new Set(value.map(String))] : [];
   }
   if (typeof value === "string" && value !== "") return [value];
+  if (isChoiceWithOther(value) && value.choice) return [value.choice];
   return [];
 }
 

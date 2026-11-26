@@ -49,6 +49,13 @@ import {
 } from "@/lib/rating-options";
 import { questionMaxPoints, pointsLabel } from "@/lib/scoring";
 import { cn } from "@/lib/utils";
+import {
+  DEFAULT_OTHER_ERROR,
+  DEFAULT_OTHER_INVALID,
+  OTHER_VALIDATION_LABELS,
+  readOtherConfig,
+  type OtherValidation,
+} from "@/lib/question-options";
 import type { QuestionOption } from "./QuestionNode";
 
 export type { QuestionType };
@@ -66,6 +73,8 @@ export type QuestionFormValues = {
   selectionErrorMessage: string | null;
   requiredErrorMessage: string | null;
   description: string | null;
+  orderMode: string | null;
+  keepLastOption: boolean;
   randomizeOptions: boolean;
   /** option value → target question id; key `__default__` = default next edge */
   optionLogic: Record<string, string | null>;
@@ -268,6 +277,8 @@ export function EditQuestionPanel({
   const [requiredErrorMessage, setRequiredErrorMessage] = useState("");
   const [description, setDescription] = useState("");
   const [randomizeOptions, setRandomizeOptions] = useState(false);
+  const [orderMode, setOrderMode] = useState("random");
+  const [keepLastOption, setKeepLastOption] = useState(false);
   const [optionLogic, setOptionLogic] = useState<Record<string, string | null>>({});
   const [saving, setSaving] = useState(false);
 
@@ -299,6 +310,8 @@ export function EditQuestionPanel({
       setRequiredErrorMessage(initialValues?.requiredErrorMessage ?? "");
       setDescription(initialValues?.description ?? "");
       setRandomizeOptions(Boolean(initialValues?.randomizeOptions));
+      setOrderMode(initialValues?.orderMode ?? "random");
+      setKeepLastOption(Boolean(initialValues?.keepLastOption));
       setOptionLogic(initialValues?.optionLogic ?? {});
     }
   }
@@ -329,6 +342,8 @@ export function EditQuestionPanel({
   })();
   const [bulkRowsOpen, setBulkRowsOpen] = useState(false);
   const hasOther = options.some((option) => option.kind === "other");
+  const otherItem = options.find((option) => option.kind === "other");
+  const otherConfig = readOtherConfig(otherItem);
   const hasNone = options.some((option) => option.kind === "none");
   const canScore = SCORABLE_TYPES.includes(type);
   const canLogic = BRANCHABLE_TYPES.includes(type);
@@ -443,6 +458,30 @@ export function EditQuestionPanel({
         label,
       }));
       return [...next, ...others];
+    });
+  };
+
+  const [bulkOptionsOpen, setBulkOptionsOpen] = useState(false);
+
+  /** Replaces the regular options with one per line, keeping the values of the ones that stay. */
+  const setRegularOptions = (lines: string[]) => {
+    setOptions((previous) => {
+      const existing = previous.filter((o) => !o.kind || o.kind === "choice");
+      const specials = previous.filter((o) => o.kind === "other" || o.kind === "none");
+      const next = lines.map((label, index) => ({
+        ...(existing[index] ?? makeOption(index, label)),
+        label,
+      }));
+      return [...next, ...specials];
+    });
+  };
+
+  const sortRegularOptions = () => {
+    setOptions((previous) => {
+      const regular = previous
+        .filter((o) => !o.kind || o.kind === "choice")
+        .sort((a, b) => a.label.localeCompare(b.label, "es", { sensitivity: "base" }));
+      return [...regular, ...previous.filter((o) => o.kind === "other" || o.kind === "none")];
     });
   };
 
@@ -645,6 +684,10 @@ export function EditQuestionPanel({
           required && requiredErrorMessage.trim() ? requiredErrorMessage.trim() : null,
         randomizeOptions:
           OPTION_BASED_TYPES.includes(type) || type === "dropdown_matrix" ? randomizeOptions : false,
+        orderMode:
+          OPTION_BASED_TYPES.includes(type) && randomizeOptions ? orderMode : null,
+        keepLastOption:
+          OPTION_BASED_TYPES.includes(type) && randomizeOptions ? keepLastOption : false,
         optionLogic: cleanedLogic,
       });
       onOpenChange(false);
@@ -876,6 +919,31 @@ export function EditQuestionPanel({
                     onRemove={removeOption}
                     onAdd={() => addOption()}
                   />
+                  {type === "dropdown" ? (
+                    <div className="mt-2 flex flex-col gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="self-start"
+                        onClick={() => setBulkOptionsOpen((open) => !open)}
+                      >
+                        Respuestas en cantidad
+                      </Button>
+                      {bulkOptionsOpen ? (
+                        <div className="flex flex-col gap-2 rounded-lg border bg-muted/20 p-3">
+                          <p className="text-xs text-muted-foreground">
+                            Una opción por línea (hasta 200). Reemplaza la lista actual.
+                          </p>
+                          <LinesField
+                            lines={regularOptions.map((option) => option.label)}
+                            onChange={setRegularOptions}
+                            rows={6}
+                          />
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {scoringEnabled && canScore && (
                     <p className="mt-3 text-sm font-medium text-muted-foreground">
                       Puntuación máxima: {pointsLabel(maxPoints)}
@@ -901,6 +969,140 @@ export function EditQuestionPanel({
                         />
                         Agregar «Ninguna de las anteriores»
                       </label>
+                    </div>
+                  ) : null}
+                  {type === "dropdown" && otherItem ? (
+                    <div className="mt-3 flex flex-col gap-3 rounded-lg border p-3 text-sm">
+                      <span className="font-medium">Opción «Otra»</span>
+                      <div className="flex flex-col gap-1.5">
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name="other-mode"
+                            className="accent-foreground"
+                            checked={otherConfig.mode === "option"}
+                            onChange={() => updateOption(otherItem.value, { otherMode: "option" })}
+                          />
+                          Mostrar una opción de respuesta
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name="other-mode"
+                            className="accent-foreground"
+                            checked={otherConfig.mode === "comment"}
+                            onChange={() => updateOption(otherItem.value, { otherMode: "comment" })}
+                          />
+                          Mostrar como campo de comentarios
+                        </label>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="other-error">Mensaje cuando se deje en blanco</Label>
+                        <Textarea
+                          id="other-error"
+                          rows={2}
+                          value={otherItem.otherErrorMessage ?? ""}
+                          placeholder={DEFAULT_OTHER_ERROR}
+                          onChange={(event) =>
+                            updateOption(otherItem.value, { otherErrorMessage: event.target.value })
+                          }
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label>Tamaño</Label>
+                        <div className="flex flex-wrap gap-2">
+                          <select
+                            aria-label="Tamaño del campo"
+                            value={otherConfig.multiline ? "multi" : "single"}
+                            onChange={(event) =>
+                              updateOption(otherItem.value, { otherMultiline: event.target.value === "multi" })
+                            }
+                            className="h-9 rounded-md border bg-background px-3 text-sm"
+                          >
+                            <option value="single">Una sola línea de texto</option>
+                            <option value="multi">Párrafo del texto</option>
+                          </select>
+                          <select
+                            aria-label="Ancho del campo"
+                            value={otherConfig.size}
+                            onChange={(event) =>
+                              updateOption(otherItem.value, { otherSize: Number(event.target.value) })
+                            }
+                            className="h-9 rounded-md border bg-background px-3 text-sm"
+                          >
+                            {[5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map((size) => (
+                              <option key={size} value={size}>
+                                {size} caracteres
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="other-validation">Validación</Label>
+                        <select
+                          id="other-validation"
+                          value={otherConfig.validation}
+                          onChange={(event) =>
+                            updateOption(otherItem.value, {
+                              otherValidation: event.target.value as OtherValidation,
+                            })
+                          }
+                          className="h-9 rounded-md border bg-background px-3 text-sm"
+                        >
+                          {(Object.keys(OTHER_VALIDATION_LABELS) as OtherValidation[]).map((key) => (
+                            <option key={key} value={key}>
+                              {OTHER_VALIDATION_LABELS[key]}
+                            </option>
+                          ))}
+                        </select>
+                        {otherConfig.validation === "text_length" ? (
+                          <div className="flex items-center gap-2">
+                            <Input
+                              type="number"
+                              min={0}
+                              max={2000}
+                              className="w-24"
+                              aria-label="Longitud mínima"
+                              value={otherConfig.minLength}
+                              onChange={(event) =>
+                                updateOption(otherItem.value, {
+                                  otherMinLength: Math.max(0, Number(event.target.value) || 0),
+                                })
+                              }
+                            />
+                            <span className="text-muted-foreground">a</span>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={2000}
+                              className="w-24"
+                              aria-label="Longitud máxima"
+                              value={otherConfig.maxLength}
+                              onChange={(event) =>
+                                updateOption(otherItem.value, {
+                                  otherMaxLength: Math.min(2000, Math.max(1, Number(event.target.value) || 1)),
+                                })
+                              }
+                            />
+                            <span className="text-muted-foreground">caracteres</span>
+                          </div>
+                        ) : null}
+                        {otherConfig.validation !== "any" ? (
+                          <>
+                            <Label htmlFor="other-invalid">Mensaje si el formato no es válido</Label>
+                            <Textarea
+                              id="other-invalid"
+                              rows={2}
+                              value={otherItem.otherInvalidMessage ?? ""}
+                              placeholder={DEFAULT_OTHER_INVALID}
+                              onChange={(event) =>
+                                updateOption(otherItem.value, { otherInvalidMessage: event.target.value })
+                              }
+                            />
+                          </>
+                        ) : null}
+                      </div>
                     </div>
                   ) : null}
                 </div>
@@ -1056,9 +1258,48 @@ export function EditQuestionPanel({
                     </span>
                     <Switch checked={randomizeOptions} onCheckedChange={setRandomizeOptions} />
                   </label>
+                  {randomizeOptions ? (
+                    <div className="flex flex-col gap-2 rounded-lg border bg-muted/20 p-3 text-sm">
+                      {(
+                        [
+                          ["random", "Distribuir aleatoriamente opciones para cada encuestado"],
+                          ["alphabetical", "Clasificar opciones alfabéticamente"],
+                          ["flip", "Presentar opciones para cada encuestado: en orden o invertidas"],
+                        ] as const
+                      ).map(([mode, label]) => (
+                        <label key={mode} className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name="order-mode"
+                            className="accent-foreground"
+                            checked={orderMode === mode}
+                            onChange={() => setOrderMode(mode)}
+                          />
+                          {label}
+                        </label>
+                      ))}
+                      <label className="mt-1 flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          className="accent-foreground"
+                          checked={keepLastOption}
+                          onChange={(event) => setKeepLastOption(event.target.checked)}
+                        />
+                        No mover la última opción de respuesta
+                      </label>
+                      <span className="text-xs text-muted-foreground">
+                        «Otra» y «Ninguna de las anteriores» siempre quedan al final.
+                      </span>
+                    </div>
+                  ) : null}
                   <Button type="button" variant="outline" size="sm" onClick={reverseOptions}>
                     Invertir orden de las opciones
                   </Button>
+                  {type === "dropdown" ? (
+                    <Button type="button" variant="outline" size="sm" onClick={sortRegularOptions}>
+                      Ordenar opciones A–Z
+                    </Button>
+                  ) : null}
                   <p className="text-xs text-muted-foreground">
                     Próximamente: tamaño/diseño de la pregunta, reenviar respuestas y piping.
                   </p>

@@ -1,4 +1,4 @@
-import type { QuestionOption } from "@/lib/question-options";
+import { isChoiceWithOther, type QuestionOption } from "@/lib/question-options";
 import type { QuestionType } from "@/lib/question-types";
 
 export type AnalysisAnswerValue =
@@ -157,7 +157,13 @@ export function buildChoiceRows(
   let totalSelections = 0;
 
   for (const answer of answers) {
-    const values = Array.isArray(answer) ? answer : answer !== null ? [String(answer)] : [];
+    const values = Array.isArray(answer)
+      ? answer
+      : isChoiceWithOther(answer)
+        ? [answer.choice]
+        : answer !== null && typeof answer !== "object"
+          ? [String(answer)]
+          : [];
     for (const value of values) {
       counts.set(value, (counts.get(value) ?? 0) + 1);
       totalSelections += 1;

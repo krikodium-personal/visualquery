@@ -1,0 +1,2 @@
+ALTER TABLE "Question" ADD COLUMN "orderMode" TEXT,
+ADD COLUMN "keepLastOption" BOOLEAN NOT NULL DEFAULT false;
