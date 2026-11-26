@@ -42,6 +42,7 @@ const optionSchema = z.object({
   kind: z
     .enum([
       "row",
+      "column",
       "choice",
       "scale_left",
       "scale_center",
@@ -53,6 +54,7 @@ const optionSchema = z.object({
       "rating_labels",
     ])
     .optional(),
+  columnValue: z.string().optional(),
   isCorrect: z.boolean().optional(),
   points: z.number().int().nonnegative().optional(),
 });
@@ -71,11 +73,13 @@ const questionPayloadSchema = z.object({
   maxSelections: z.number().int().positive().nullable(),
   selectionErrorMessage: z.string().max(500).nullable(),
   requiredErrorMessage: z.string().max(500).nullable(),
+  description: z.string().max(1000).nullable(),
   randomizeOptions: z.boolean(),
 }).refine(
   (question) =>
     question.type === "multi_choice" ||
     question.type === "image_choice" ||
+    question.type === "dropdown_matrix" ||
     (question.minSelections === null &&
       question.maxSelections === null &&
       question.selectionErrorMessage === null),
@@ -158,6 +162,7 @@ export async function applyCanvasChanges(
             maxSelections: q.maxSelections,
             selectionErrorMessage: q.selectionErrorMessage,
             requiredErrorMessage: q.requiredErrorMessage,
+            description: q.description,
             randomizeOptions: q.randomizeOptions,
           },
         });
@@ -179,6 +184,7 @@ export async function applyCanvasChanges(
             maxSelections: q.maxSelections,
             selectionErrorMessage: q.selectionErrorMessage,
             requiredErrorMessage: q.requiredErrorMessage,
+            description: q.description,
             randomizeOptions: q.randomizeOptions,
           },
         });

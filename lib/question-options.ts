@@ -12,6 +12,7 @@ const optionSchema = z.object({
   kind: z
     .enum([
       "row",
+      "column",
       "choice",
       "scale_left",
       "scale_center",
@@ -23,6 +24,8 @@ const optionSchema = z.object({
       "rating_labels",
     ])
     .optional(),
+  // Dropdown matrix: the column (menu) a "choice" option belongs to. Absent = shared by all.
+  columnValue: z.string().optional(),
   isCorrect: z.boolean().optional(),
   points: z.number().int().nonnegative().optional(),
 });
@@ -56,4 +59,44 @@ export function optionPoints(option: QuestionOption): number {
   if (!option.isCorrect) return 0;
   const points = option.points ?? 0;
   return Number.isFinite(points) && points > 0 ? Math.floor(points) : 0;
+}
+
+/** Separator of the answer key of a dropdown matrix cell: `${rowValue}::${columnValue}`. */
+export const MATRIX_KEY_SEPARATOR = "::";
+
+export function matrixCellKey(rowValue: string, columnValue: string): string {
+  return `${rowValue}${MATRIX_KEY_SEPARATOR}${columnValue}`;
+}
+
+/** Human label for an answer key; matrix cells become "Fila · Columna". */
+export function answerKeyLabel(key: string, labels: Map<string, string>): string {
+  if (key.includes(MATRIX_KEY_SEPARATOR)) {
+    return key
+      .split(MATRIX_KEY_SEPARATOR)
+      .map((part) => labels.get(part) ?? part)
+      .join(" · ");
+  }
+  return labels.get(key) ?? key;
+}
+
+/**
+ * Number of rows of a dropdown matrix that are fully answered. With 2+ columns a row counts
+ * once every one of its cells has a value; with a single (legacy) menu, once the row does.
+ */
+export function countAnsweredMatrixRows(
+  options: QuestionOption[],
+  answer: Record<string, unknown>,
+): number {
+  const rows = options.filter((option) => option.kind === "row");
+  const columns = options.filter((option) => option.kind === "column");
+  const filled = (key: string) => String(answer[key] ?? "").trim() !== "";
+  return rows.filter((row) =>
+    columns.length >= 2
+      ? columns.every((column) => filled(matrixCellKey(row.value, column.value)))
+      : filled(row.value),
+  ).length;
+}
+
+export function matrixRowCount(options: QuestionOption[]): number {
+  return options.filter((option) => option.kind === "row").length;
 }

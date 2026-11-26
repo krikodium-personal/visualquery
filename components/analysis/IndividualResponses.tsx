@@ -10,6 +10,7 @@ import type {
   AnalysisQuestion,
   AnalysisResponse,
 } from "@/lib/analysis";
+import { answerKeyLabel } from "@/lib/question-options";
 
 export function IndividualResponses({
   questions,
@@ -126,6 +127,6 @@ function formatAnswer(value: AnalysisAnswerValue, question: AnalysisQuestion): s
   if (typeof value === "number") return String(value);
   if (Array.isArray(value)) return value.map((entry) => labels.get(entry) ?? entry).join(" · ");
   return Object.entries(value)
-    .map(([key, entry]) => `${labels.get(key) ?? key}: ${labels.get(String(entry)) ?? entry}`)
+    .map(([key, entry]) => `${answerKeyLabel(key, labels)}: ${labels.get(String(entry)) ?? entry}`)
     .join(" · ");
 }

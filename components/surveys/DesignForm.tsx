@@ -62,6 +62,7 @@ type PreviewQuestion = {
   maxSelections: number | null;
   selectionErrorMessage: string | null;
   requiredErrorMessage?: string | null;
+  description?: string | null;
   randomizeOptions?: boolean;
 };
 

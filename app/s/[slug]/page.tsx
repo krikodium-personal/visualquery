@@ -75,6 +75,7 @@ export default async function PublicSurveyPage({
     maxSelections: q.maxSelections,
     selectionErrorMessage: q.selectionErrorMessage,
     requiredErrorMessage: q.requiredErrorMessage,
+    description: q.description,
     randomizeOptions: q.randomizeOptions,
   }));
 

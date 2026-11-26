@@ -65,12 +65,13 @@ export type QuestionFormValues = {
   maxSelections: number | null;
   selectionErrorMessage: string | null;
   requiredErrorMessage: string | null;
+  description: string | null;
   randomizeOptions: boolean;
   /** option value → target question id; key `__default__` = default next edge */
   optionLogic: Record<string, string | null>;
 };
 
-type SelectionRule = "any" | "exactly" | "at_least" | "at_most";
+type SelectionRule = "any" | "all" | "exactly" | "at_least" | "at_most" | "range";
 type EditorTab = "edit" | "options" | "logic";
 
 const OTHER_VALUE_PREFIX = "other-";
@@ -84,6 +85,15 @@ function selectionRuleFor(values: QuestionFormValues | undefined): SelectionRule
   if (values.minSelections != null) return "at_least";
   if (values.maxSelections != null) return "at_most";
   return "any";
+}
+
+/** Matrix row-count rule: no limits = every row ("todas"); both limits apart = a range. */
+function matrixRuleFor(values: QuestionFormValues | undefined): SelectionRule {
+  if (!values) return "all";
+  const { minSelections: min, maxSelections: max } = values;
+  if (min != null && max != null && min !== max) return "range";
+  const rule = selectionRuleFor(values);
+  return rule === "any" ? "all" : rule;
 }
 
 function makeOption(index: number, label: string, kind?: QuestionOption["kind"]): QuestionOption {
@@ -121,12 +131,17 @@ function defaultOptions(type: QuestionType): QuestionOption[] {
     ];
   }
   if (type === "dropdown_matrix") {
+    const columns = [makeOption(2, "Columna 1", "column"), makeOption(3, "Columna 2", "column")];
     return [
       makeOption(0, "Fila 1", "row"),
       makeOption(1, "Fila 2", "row"),
-      makeOption(2, "Opción 1", "choice"),
-      makeOption(3, "Opción 2", "choice"),
-      makeOption(4, "Opción 3", "choice"),
+      ...columns,
+      ...columns.flatMap((column, columnIndex) =>
+        [1, 2, 3].map((n) => ({
+          ...makeOption(4 + columnIndex * 3 + n, `Opción ${n}`, "choice"),
+          columnValue: column.value,
+        })),
+      ),
     ];
   }
   if (type === "rating_matrix") return [makeOption(0, "Aspecto 1"), makeOption(1, "Aspecto 2")];
@@ -150,9 +165,60 @@ function optionsForEdit(type: QuestionType, stored: QuestionOption[] | undefined
       otherOption: config.otherOption,
     });
   }
+  if (type === "dropdown_matrix" && stored?.length) return normalizeMatrixOptions(stored);
   if (type !== "slider") return stored?.length ? stored : defaultOptions(type);
   const defaults = defaultOptions(type);
   return defaults.map((fallback) => stored?.find((option) => option.kind === fallback.kind) ?? fallback);
+}
+
+/** Legacy matrices share one list of choices: read it as a single column. */
+function normalizeMatrixOptions(stored: QuestionOption[]): QuestionOption[] {
+  if (stored.some((option) => option.kind === "column")) return stored;
+  const column: QuestionOption = {
+    value: `col-${crypto.randomUUID().slice(2, 8)}`,
+    label: "Menú",
+    kind: "column",
+  };
+  return [
+    ...stored.map((option) =>
+      option.kind === "choice" ? { ...option, columnValue: column.value } : option,
+    ),
+    column,
+  ];
+}
+
+function parseLines(text: string): string[] {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 200);
+}
+
+/** Textarea of one entry per line; keeps its own text so blank lines survive while typing. */
+function LinesField({
+  lines,
+  onChange,
+  rows = 4,
+  placeholder,
+}: {
+  lines: string[];
+  onChange: (lines: string[]) => void;
+  rows?: number;
+  placeholder?: string;
+}) {
+  const [text, setText] = useState(() => lines.join("\n"));
+  return (
+    <Textarea
+      value={text}
+      rows={rows}
+      placeholder={placeholder}
+      onChange={(event) => {
+        setText(event.target.value);
+        onChange(parseLines(event.target.value));
+      }}
+    />
+  );
 }
 
 function optionHeading(type: QuestionType): string {
@@ -197,8 +263,10 @@ export function EditQuestionPanel({
   const [scoringEnabled, setScoringEnabled] = useState(false);
   const [selectionRule, setSelectionRule] = useState<SelectionRule>("any");
   const [selectionCount, setSelectionCount] = useState(1);
+  const [selectionMax, setSelectionMax] = useState(2);
   const [selectionErrorMessage, setSelectionErrorMessage] = useState("");
   const [requiredErrorMessage, setRequiredErrorMessage] = useState("");
+  const [description, setDescription] = useState("");
   const [randomizeOptions, setRandomizeOptions] = useState(false);
   const [optionLogic, setOptionLogic] = useState<Record<string, string | null>>({});
   const [saving, setSaving] = useState(false);
@@ -218,10 +286,18 @@ export function EditQuestionPanel({
       );
       const nextRule = selectionRuleFor(initialValues);
       // Image questions always carry a rule; older ones (single pick) read as "exactly 1".
-      setSelectionRule(nextType === "image_choice" && nextRule === "any" ? "exactly" : nextRule);
+      setSelectionRule(
+        nextType === "dropdown_matrix"
+          ? matrixRuleFor(initialValues)
+          : nextType === "image_choice" && nextRule === "any"
+            ? "exactly"
+            : nextRule,
+      );
       setSelectionCount(initialValues?.minSelections ?? initialValues?.maxSelections ?? 1);
+      setSelectionMax(initialValues?.maxSelections ?? (initialValues?.minSelections ?? 1) + 1);
       setSelectionErrorMessage(initialValues?.selectionErrorMessage ?? "");
       setRequiredErrorMessage(initialValues?.requiredErrorMessage ?? "");
+      setDescription(initialValues?.description ?? "");
       setRandomizeOptions(Boolean(initialValues?.randomizeOptions));
       setOptionLogic(initialValues?.optionLogic ?? {});
     }
@@ -235,7 +311,23 @@ export function EditQuestionPanel({
   );
   const editableOptions = [...regularOptions, ...specialOptions];
   const matrixRows = options.filter((option) => option.kind === "row");
-  const matrixChoices = options.filter((option) => option.kind === "choice");
+  const matrixColumns = options.filter((option) => option.kind === "column");
+  const matrixOther = options.find((option) => option.kind === "other");
+  const choicesOfColumn = (columnValue: string) =>
+    options.filter((option) => option.kind === "choice" && option.columnValue === columnValue);
+  const matrixProblem = (() => {
+    if (type !== "dropdown_matrix") return null;
+    if (!matrixRows.some((row) => row.label.trim())) return "Agregá al menos una fila.";
+    if (!matrixColumns.length) return "Agregá al menos una columna.";
+    for (const column of matrixColumns) {
+      if (!column.label.trim()) return "Todas las columnas necesitan un nombre.";
+      if (!choicesOfColumn(column.value).some((choice) => choice.label.trim())) {
+        return `La columna «${column.label.trim()}» necesita al menos una opción.`;
+      }
+    }
+    return null;
+  })();
+  const [bulkRowsOpen, setBulkRowsOpen] = useState(false);
   const hasOther = options.some((option) => option.kind === "other");
   const hasNone = options.some((option) => option.kind === "none");
   const canScore = SCORABLE_TYPES.includes(type);
@@ -264,8 +356,11 @@ export function EditQuestionPanel({
     setOptionLogic({});
     if (!SCORABLE_TYPES.includes(nextType)) setScoringEnabled(false);
     if (nextType !== "multi_choice") {
-      setSelectionRule(nextType === "image_choice" ? "exactly" : "any");
+      setSelectionRule(
+        nextType === "image_choice" ? "exactly" : nextType === "dropdown_matrix" ? "all" : "any",
+      );
       setSelectionCount(1);
+      setSelectionMax(2);
       setSelectionErrorMessage("");
     }
   };
@@ -312,13 +407,67 @@ export function EditQuestionPanel({
     );
   };
 
-  const addOption = (kind?: "row" | "choice") => {
+  const addOption = (kind?: "row" | "choice" | "column") => {
     setOptions((previous) => {
       const specials = previous.filter((o) => o.kind === "other" || o.kind === "none");
       const normals = previous.filter((o) => o.kind !== "other" && o.kind !== "none");
       // Empty label + placeholder: focus starts ready to type (no "Opción N" to erase).
       return [...normals, makeOption(normals.length, "", kind), ...specials];
     });
+  };
+
+  const setColumnChoices = (columnValue: string, lines: string[]) => {
+    setOptions((previous) => {
+      const existing = previous.filter(
+        (option) => option.kind === "choice" && option.columnValue === columnValue,
+      );
+      const others = previous.filter(
+        (option) => !(option.kind === "choice" && option.columnValue === columnValue),
+      );
+      const next = lines.map((label, index) => ({
+        ...(existing[index] ?? makeOption(index, label, "choice")),
+        label,
+        kind: "choice" as const,
+        columnValue,
+      }));
+      return [...others, ...next];
+    });
+  };
+
+  const setMatrixRows = (lines: string[]) => {
+    setOptions((previous) => {
+      const existing = previous.filter((option) => option.kind === "row");
+      const others = previous.filter((option) => option.kind !== "row");
+      const next = lines.map((label, index) => ({
+        ...(existing[index] ?? makeOption(index, label, "row")),
+        label,
+      }));
+      return [...next, ...others];
+    });
+  };
+
+  const sortMatrixRows = () => {
+    setOptions((previous) => {
+      const rows = previous
+        .filter((option) => option.kind === "row")
+        .sort((a, b) => a.label.localeCompare(b.label, "es", { sensitivity: "base" }));
+      return [...rows, ...previous.filter((option) => option.kind !== "row")];
+    });
+  };
+
+  const addMatrixColumn = () => {
+    setOptions((previous) => [
+      ...previous,
+      makeOption(previous.length, "", "column"),
+    ]);
+  };
+
+  const removeMatrixColumn = (columnValue: string) => {
+    setOptions((previous) =>
+      previous.filter(
+        (option) => option.value !== columnValue && option.columnValue !== columnValue,
+      ),
+    );
   };
 
   const removeOption = (value: string) => {
@@ -378,6 +527,7 @@ export function EditQuestionPanel({
     return options
       .filter((option) => {
         if (option.kind === "other" || option.kind === "none") return true;
+        if (type === "dropdown_matrix") return option.label.trim().length > 0;
         return option.label.trim().length > 0 && !isDefaultOptionLabel(option.label);
       })
       .map((option) => {
@@ -445,19 +595,26 @@ export function EditQuestionPanel({
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!title.trim()) return;
+    if (!title.trim() || matrixProblem) return;
     setSaving(true);
     try {
       const cleanedOptions = cleanOptions();
       const requestedCount = Number.isFinite(selectionCount) ? selectionCount : 1;
-      const choiceCount = cleanedOptions.filter(
-        (o) => o.kind !== "other" && o.kind !== "none",
-      ).length;
+      const choiceCount =
+        type === "dropdown_matrix"
+          ? cleanedOptions.filter((o) => o.kind === "row").length
+          : cleanedOptions.filter((o) => o.kind !== "other" && o.kind !== "none").length;
       const normalizedCount = Math.max(1, Math.min(requestedCount, Math.max(1, choiceCount)));
+      const normalizedMax = Math.max(
+        normalizedCount,
+        Math.min(Number.isFinite(selectionMax) ? selectionMax : normalizedCount, Math.max(1, choiceCount)),
+      );
       // Image choice follows the checkbox rules; it always has one (default: exactly 1).
       const hasSelectionRule =
         (type === "multi_choice" && selectionRule !== "any") ||
-        (type === "image_choice" && selectionRule !== "any");
+        (type === "image_choice" && selectionRule !== "any") ||
+        // Matrix rules only apply to required questions; "todas" means no limits.
+        (type === "dropdown_matrix" && required && selectionRule !== "all");
       const nextScoring = scoringEnabled && SCORABLE_TYPES.includes(type);
       const cleanedLogic: Record<string, string | null> = {};
       for (const [key, target] of Object.entries(optionLogic)) {
@@ -472,14 +629,22 @@ export function EditQuestionPanel({
         required,
         scoringEnabled: nextScoring,
         minSelections: hasSelectionRule && selectionRule !== "at_most" ? normalizedCount : null,
-        maxSelections: hasSelectionRule && selectionRule !== "at_least" ? normalizedCount : null,
+        maxSelections: hasSelectionRule
+          ? selectionRule === "range"
+            ? normalizedMax
+            : selectionRule !== "at_least"
+              ? normalizedCount
+              : null
+          : null,
         selectionErrorMessage:
           hasSelectionRule && selectionErrorMessage.trim()
             ? selectionErrorMessage.trim()
             : null,
+        description: description.trim() || null,
         requiredErrorMessage:
           required && requiredErrorMessage.trim() ? requiredErrorMessage.trim() : null,
-        randomizeOptions: OPTION_BASED_TYPES.includes(type) ? randomizeOptions : false,
+        randomizeOptions:
+          OPTION_BASED_TYPES.includes(type) || type === "dropdown_matrix" ? randomizeOptions : false,
         optionLogic: cleanedLogic,
       });
       onOpenChange(false);
@@ -504,7 +669,9 @@ export function EditQuestionPanel({
               ["options", "Opciones"],
               ["logic", "Lógica"],
             ] as const
-          ).map(([key, label]) => (
+          )
+            .filter(([key]) => key !== "logic" || canLogic)
+            .map(([key, label]) => (
             <button
               key={key}
               type="button"
@@ -533,6 +700,18 @@ export function EditQuestionPanel({
                   placeholder="¿Qué querés preguntar?"
                   autoFocus
                   required
+                />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="question-description">Descripción</Label>
+                <Textarea
+                  id="question-description"
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                  placeholder="Texto opcional que se muestra debajo de la pregunta"
+                  rows={2}
+                  maxLength={1000}
                 />
               </div>
 
@@ -586,21 +765,102 @@ export function EditQuestionPanel({
               )}
 
               {type === "dropdown_matrix" ? (
-                <div className="grid gap-5 border-t pt-4 sm:grid-cols-2">
-                  <OptionEditor
-                    title="Filas"
-                    options={matrixRows}
-                    onUpdate={updateOption}
-                    onRemove={removeOption}
-                    onAdd={() => addOption("row")}
-                  />
-                  <OptionEditor
-                    title="Opciones de cada menú"
-                    options={matrixChoices}
-                    onUpdate={updateOption}
-                    onRemove={removeOption}
-                    onAdd={() => addOption("choice")}
-                  />
+                <div className="flex flex-col gap-5 border-t pt-4">
+                  <div className="flex flex-col gap-2">
+                    <OptionEditor
+                      title="Filas"
+                      options={matrixRows}
+                      onUpdate={updateOption}
+                      onRemove={removeOption}
+                      onAdd={() => addOption("row")}
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setBulkRowsOpen((open) => !open)}
+                      >
+                        Respuestas en cantidad
+                      </Button>
+                    </div>
+                    {bulkRowsOpen ? (
+                      <div className="flex flex-col gap-2 rounded-lg border bg-muted/20 p-3">
+                        <p className="text-xs text-muted-foreground">
+                          Una fila por línea (hasta 200). Reemplaza la lista actual.
+                        </p>
+                        <LinesField
+                          lines={matrixRows.map((row) => row.label)}
+                          onChange={setMatrixRows}
+                          rows={6}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="flex flex-col gap-3">
+                    <Label>Columnas (cada una es un menú con sus propias opciones)</Label>
+                    {matrixColumns.map((column, index) => (
+                      <div key={column.value} className="flex flex-col gap-2 rounded-lg border p-3">
+                        <div className="flex items-center gap-2">
+                          <Input
+                            value={column.label}
+                            onChange={(event) => updateOption(column.value, { label: event.target.value })}
+                            placeholder={`Nombre de la columna ${index + 1}`}
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Eliminar columna"
+                            onClick={() => removeMatrixColumn(column.value)}
+                            disabled={matrixColumns.length <= 1}
+                          >
+                            <X className="size-4" />
+                          </Button>
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          Opciones del menú: una por línea (hasta 200).
+                        </span>
+                        <LinesField
+                          lines={choicesOfColumn(column.value).map((choice) => choice.label)}
+                          onChange={(lines) => setColumnChoices(column.value, lines)}
+                        />
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="self-start"
+                      onClick={addMatrixColumn}
+                    >
+                      <Plus className="size-4" /> Agregar columna
+                    </Button>
+                  </div>
+
+                  <div className="flex flex-col gap-2 rounded-lg border bg-muted/20 p-3">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        className="accent-foreground"
+                        checked={Boolean(matrixOther)}
+                        onChange={(event) => setHasOther(event.target.checked)}
+                      />
+                      Agregar una opción «Otra» para comentarios
+                    </label>
+                    {matrixOther ? (
+                      <Input
+                        value={matrixOther.label}
+                        onChange={(event) => updateOption(matrixOther.value, { label: event.target.value })}
+                        placeholder="Otra (especificar)"
+                      />
+                    ) : null}
+                  </div>
+
+                  {matrixProblem ? (
+                    <p className="text-sm text-destructive">{matrixProblem}</p>
+                  ) : null}
                 </div>
               ) : OPTION_BASED_TYPES.includes(type) ? (
                 <div className="border-t pt-4">
@@ -687,9 +947,9 @@ export function EditQuestionPanel({
             <>
               <div className="flex items-center justify-between">
                 <div>
-                  <Label htmlFor="question-required">Exigir una respuesta</Label>
+                  <Label htmlFor="question-required">Respuesta obligatoria</Label>
                   <p className="text-xs text-muted-foreground">
-                    Como en SurveyMonkey: el encuestado no puede continuar sin responder.
+                    El encuestado no puede continuar sin responder.
                   </p>
                 </div>
                 <Switch id="question-required" checked={required} onCheckedChange={setRequired} />
@@ -704,6 +964,84 @@ export function EditQuestionPanel({
                     onChange={(event) => setRequiredErrorMessage(event.target.value)}
                     placeholder="Esta pregunta es obligatoria."
                   />
+                </div>
+              ) : null}
+
+              {type === "dropdown_matrix" && required ? (
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="matrix-row-rule">Cantidad de filas que deben responder</Label>
+                  <div className="flex items-center gap-2">
+                    <select
+                      id="matrix-row-rule"
+                      value={selectionRule}
+                      onChange={(event) => setSelectionRule(event.target.value as SelectionRule)}
+                      className="h-9 rounded-md border bg-background px-3 text-sm"
+                    >
+                      <option value="all">Todas</option>
+                      <option value="at_least">Como mínimo</option>
+                      <option value="at_most">Como máximo</option>
+                      <option value="exactly">Exactamente</option>
+                      <option value="range">Un rango</option>
+                    </select>
+                    {selectionRule !== "all" ? (
+                      <>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={Math.max(1, matrixRows.length)}
+                          value={selectionCount}
+                          onChange={(event) => setSelectionCount(Number(event.target.value))}
+                          className="w-20"
+                          aria-label={selectionRule === "range" ? "Mínimo de filas" : "Cantidad de filas"}
+                        />
+                        {selectionRule === "range" ? (
+                          <>
+                            <span className="text-sm text-muted-foreground">a</span>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={Math.max(1, matrixRows.length)}
+                              value={selectionMax}
+                              onChange={(event) => setSelectionMax(Number(event.target.value))}
+                              className="w-20"
+                              aria-label="Máximo de filas"
+                            />
+                          </>
+                        ) : null}
+                      </>
+                    ) : null}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Una fila cuenta como respondida cuando todos sus menús tienen una opción.
+                  </p>
+                  {selectionRule !== "all" ? (
+                    <>
+                      <Label htmlFor="matrix-rule-message">Mensaje de validación</Label>
+                      <Textarea
+                        id="matrix-rule-message"
+                        value={selectionErrorMessage}
+                        onChange={(event) => setSelectionErrorMessage(event.target.value)}
+                        placeholder="Por favor, respondé la cantidad indicada de filas"
+                      />
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {type === "dropdown_matrix" ? (
+                <div className="flex flex-col gap-3 border-t pt-4">
+                  <label className="flex items-center justify-between gap-3 text-sm">
+                    <span>
+                      <span className="font-medium">Ordenar filas al azar</span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">
+                        Cada encuestado ve las filas en un orden distinto.
+                      </span>
+                    </span>
+                    <Switch checked={randomizeOptions} onCheckedChange={setRandomizeOptions} />
+                  </label>
+                  <Button type="button" variant="outline" size="sm" onClick={sortMatrixRows}>
+                    Ordenar filas A–Z
+                  </Button>
                 </div>
               ) : null}
 

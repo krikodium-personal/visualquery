@@ -184,6 +184,7 @@ export async function duplicateSurvey(surveyId: string): Promise<string> {
         maxSelections: question.maxSelections,
         selectionErrorMessage: question.selectionErrorMessage,
         requiredErrorMessage: question.requiredErrorMessage,
+        description: question.description,
         randomizeOptions: question.randomizeOptions,
       },
     });

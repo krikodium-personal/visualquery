@@ -7,7 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { imageFrameStyle, type QuestionOption } from "@/lib/question-options";
+import {
+  countAnsweredMatrixRows,
+  imageFrameStyle,
+  matrixCellKey,
+  matrixRowCount,
+  type QuestionOption,
+} from "@/lib/question-options";
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
 import {
   computeProgress,
@@ -66,6 +72,7 @@ type RuntimeQuestion = {
   maxSelections: number | null;
   selectionErrorMessage: string | null;
   requiredErrorMessage?: string | null;
+  description?: string | null;
   randomizeOptions?: boolean;
 };
 
@@ -394,9 +401,11 @@ export function SurveyRunner({
 
       <h2 className="text-3xl font-bold leading-tight tracking-tight">{currentQuestion.title}</h2>
 
-      <p className="-mt-2 text-sm text-muted-foreground">
-        {imageInstruction(currentQuestion) ?? QUESTION_TYPE_INSTRUCTIONS[currentQuestion.type]}
-      </p>
+      {currentQuestion.description?.trim() ? (
+        <p className="-mt-2 whitespace-pre-line text-base text-muted-foreground">
+          {currentQuestion.description.trim()}
+        </p>
+      ) : null}
 
       {(() => {
         const ratingHasOther =
@@ -423,6 +432,11 @@ export function SurveyRunner({
               themeColor={design.themeColor}
               shapeClass={shapeClass}
             />
+            <p className="text-xs text-muted-foreground">
+              {imageInstruction(currentQuestion) ??
+                matrixRuleText(currentQuestion) ??
+                QUESTION_TYPE_INSTRUCTIONS[currentQuestion.type]}
+            </p>
             {autoAdvances ? null : (
               <Button
                 className={cn("mt-2 w-full", shapeClass)}
@@ -581,6 +595,19 @@ function imageInstruction(question: RuntimeQuestion): string | null {
   return `Selecciona como máximo ${images(max ?? 1)}`;
 }
 
+/** Plain-language row-count rule of a dropdown matrix, or null when every row is required. */
+function matrixRuleText(question: RuntimeQuestion): string | null {
+  if (question.type !== "dropdown_matrix") return null;
+  const { minSelections: min, maxSelections: max } = question;
+  const rows = (n: number) => (n === 1 ? "1 fila" : `${n} filas`);
+  if (min == null && max == null) return null;
+  if (min != null && max != null) {
+    return min === max ? `Respondé ${rows(min)}` : `Respondé entre ${min} y ${rows(max)}`;
+  }
+  if (min != null) return `Respondé al menos ${rows(min)}`;
+  return `Respondé como máximo ${rows(max ?? 1)}`;
+}
+
 function isAnswerComplete(question: RuntimeQuestion, value: AnswerValue): boolean {
   if (isEmpty(value)) return false;
   if (question.type === "rating") {
@@ -598,7 +625,11 @@ function isAnswerComplete(question: RuntimeQuestion, value: AnswerValue): boolea
   }
   const record = asRecord(value);
   if (question.type === "dropdown_matrix") {
-    return question.options.filter((option) => option.kind === "row").every((row) => record[row.value]);
+    const answered = countAnsweredMatrixRows(question.options, record);
+    const { minSelections: min, maxSelections: max } = question;
+    // No rule = every row must be answered ("todas").
+    if (min == null && max == null) return answered === matrixRowCount(question.options);
+    return (min == null || answered >= min) && (max == null || answered <= max);
   }
   if (question.type === "rating_matrix" || question.type === "multiple_text") {
     return question.options.every((option) => String(record[option.value] ?? "").trim());
@@ -913,8 +944,88 @@ function QuestionInput({
 
   if (question.type === "dropdown_matrix") {
     const record = asRecord(value);
-    const rows = question.options.filter((option) => option.kind === "row");
+    const allRows = question.options.filter((option) => option.kind === "row");
+    const rows = question.randomizeOptions ? shuffleOptions(allRows, question.id) : allRows;
+    const columns = question.options.filter((option) => option.kind === "column");
     const choices = question.options.filter((option) => option.kind === "choice");
+    const otherOption = question.options.find((option) => option.kind === "other");
+    const choicesOf = (columnValue?: string) =>
+      choices.filter((choice) => !choice.columnValue || choice.columnValue === columnValue);
+    const selectClass = cn("h-10 w-full min-w-32 border bg-background px-3", shapeClass);
+    const ruleText = matrixRuleText(question);
+    const answeredRows = countAnsweredMatrixRows(question.options, record);
+    const ruleBroken =
+      ruleText !== null &&
+      !isEmpty(value) &&
+      ((question.minSelections != null && answeredRows < question.minSelections) ||
+        (question.maxSelections != null && answeredRows > question.maxSelections));
+    const ruleHint = ruleBroken ? (
+      <p className="text-sm text-destructive">{question.selectionErrorMessage || `${ruleText}.`}</p>
+    ) : null;
+    const otherField = otherOption ? (
+      <label className="mt-1 flex flex-col gap-1.5 text-sm">
+        <span>{otherOption.label}</span>
+        <Input
+          value={String(record[otherOption.value] ?? "")}
+          onChange={(event) => onChange({ ...record, [otherOption.value]: event.target.value })}
+          disabled={disabled}
+          className={shapeClass}
+        />
+      </label>
+    ) : null;
+
+    if (columns.length >= 2) {
+      return (
+        <div className="flex flex-col gap-3">
+          <div className="overflow-x-auto">
+            <table className="w-full border-separate border-spacing-y-2 text-sm">
+              <thead>
+                <tr>
+                  <th />
+                  {columns.map((column) => (
+                    <th key={column.value} className="px-1 text-left font-medium">
+                      {column.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.value}>
+                    <td className="pr-3 align-middle">{row.label}</td>
+                    {columns.map((column) => {
+                      const key = matrixCellKey(row.value, column.value);
+                      return (
+                        <td key={column.value} className="px-1">
+                          <select
+                            value={String(record[key] ?? "")}
+                            onChange={(event) => onChange({ ...record, [key]: event.target.value })}
+                            disabled={disabled}
+                            className={selectClass}
+                            aria-label={`${row.label} – ${column.label}`}
+                          >
+                            <option value="">Seleccioná</option>
+                            {choicesOf(column.value).map((choice) => (
+                              <option key={choice.value} value={choice.value}>
+                                {choice.label}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {ruleHint}
+          {otherField}
+        </div>
+      );
+    }
+
+    const menuChoices = choicesOf(columns[0]?.value);
     return (
       <div className="flex flex-col gap-3">
         {rows.map((row) => (
@@ -922,10 +1033,12 @@ function QuestionInput({
             <span>{row.label}</span>
             <select value={String(record[row.value] ?? "")} onChange={(event) => onChange({ ...record, [row.value]: event.target.value })} disabled={disabled} className={cn("h-10 border bg-background px-3", shapeClass)}>
               <option value="">Seleccioná</option>
-              {choices.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
+              {menuChoices.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
             </select>
           </label>
         ))}
+        {ruleHint}
+        {otherField}
       </div>
     );
   }

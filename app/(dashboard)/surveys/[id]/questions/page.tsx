@@ -45,6 +45,7 @@ export default async function SurveyQuestionsPage({
     maxSelections: q.maxSelections,
     selectionErrorMessage: q.selectionErrorMessage,
     requiredErrorMessage: q.requiredErrorMessage,
+    description: q.description,
     randomizeOptions: q.randomizeOptions,
   }));
 

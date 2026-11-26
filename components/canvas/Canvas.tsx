@@ -106,6 +106,7 @@ export type SurveyQuestion = {
   maxSelections: number | null;
   selectionErrorMessage: string | null;
   requiredErrorMessage: string | null;
+  description: string | null;
   randomizeOptions: boolean;
 };
 
@@ -184,6 +185,7 @@ function buildInitialNodes(questions: SurveyQuestion[]): QuestionNode[] {
       maxSelections: q.maxSelections,
       selectionErrorMessage: q.selectionErrorMessage,
       requiredErrorMessage: q.requiredErrorMessage,
+      description: q.description,
       randomizeOptions: q.randomizeOptions,
       onEdit: () => {},
       onDelete: () => {},
@@ -394,6 +396,7 @@ export function Canvas({
               maxSelections: n.data.maxSelections ?? null,
               selectionErrorMessage: n.data.selectionErrorMessage ?? null,
               requiredErrorMessage: n.data.requiredErrorMessage ?? null,
+              description: n.data.description ?? null,
               randomizeOptions: n.data.randomizeOptions ?? false,
             })),
             edges: capturedEdges.map((e) => ({
@@ -587,6 +590,7 @@ export function Canvas({
                   maxSelections: values.maxSelections,
                   selectionErrorMessage: values.selectionErrorMessage,
                   requiredErrorMessage: values.requiredErrorMessage,
+                  description: values.description,
                   randomizeOptions: values.randomizeOptions,
                 },
               }
@@ -651,6 +655,7 @@ export function Canvas({
           maxSelections: values.maxSelections,
           selectionErrorMessage: values.selectionErrorMessage,
           requiredErrorMessage: values.requiredErrorMessage,
+          description: values.description,
           randomizeOptions: values.randomizeOptions,
           onEdit: () => {},
           onDelete: () => {},
@@ -915,6 +920,7 @@ export function Canvas({
         maxSelections: editingNode.data.maxSelections ?? null,
         selectionErrorMessage: editingNode.data.selectionErrorMessage ?? null,
         requiredErrorMessage: editingNode.data.requiredErrorMessage ?? null,
+        description: editingNode.data.description ?? null,
         randomizeOptions: editingNode.data.randomizeOptions ?? false,
         optionLogic: Object.fromEntries(
           edges
@@ -950,6 +956,7 @@ export function Canvas({
         maxSelections: n.data.maxSelections ?? null,
         selectionErrorMessage: n.data.selectionErrorMessage ?? null,
         requiredErrorMessage: n.data.requiredErrorMessage ?? null,
+        description: n.data.description ?? null,
         randomizeOptions: n.data.randomizeOptions ?? false,
       })),
     [nodes],
@@ -1017,7 +1024,7 @@ export function Canvas({
           <Panel position="top-right" className="flex items-center gap-2">
             {dirty && (
               <span className="rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-950 dark:bg-amber-950/40 dark:text-amber-100">
-                Hay cambios sin guardar (p. ej. posición)
+                Hay cambios sin guardar
               </span>
             )}
             <Button size="sm" variant="outline" onClick={handleAlign} disabled={nodes.length === 0}>

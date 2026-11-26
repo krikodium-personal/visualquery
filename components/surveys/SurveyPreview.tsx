@@ -40,6 +40,7 @@ type PreviewQuestion = {
   maxSelections: number | null;
   selectionErrorMessage: string | null;
   requiredErrorMessage: string | null;
+  description: string | null;
   randomizeOptions: boolean;
 };
 
@@ -86,7 +87,7 @@ function overviewOptions(question: PreviewQuestion): QuestionOption[] {
       (option) => isRatingLevel(option) || option.kind === "other" || option.kind === "none",
     );
   }
-  return question.options.filter((option) => !isRatingMeta(option) && option.kind !== "row");
+  return question.options.filter((option) => !isRatingMeta(option) && option.kind !== "row" && option.kind !== "column");
 }
 
 function answerMatches(answer: AnswerValue | undefined, optionValue: string): boolean {

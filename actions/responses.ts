@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import type { AnswerValue } from "@/lib/flow-engine";
+import { countAnsweredMatrixRows, parseOptions } from "@/lib/question-options";
 
 async function assertSurveyAcceptingResponses(surveyId: string) {
   const survey = await prisma.survey.findFirst({
@@ -51,9 +52,31 @@ export async function submitAnswer(
       minSelections: true,
       maxSelections: true,
       selectionErrorMessage: true,
+      options: true,
     },
   });
   if (!question) throw new Error("Pregunta no válida");
+
+  if (
+    question.type === "dropdown_matrix" &&
+    (question.minSelections !== null || question.maxSelections !== null) &&
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value)
+  ) {
+    const answered = countAnsweredMatrixRows(
+      parseOptions(question.options),
+      value as Record<string, unknown>,
+    );
+    if (
+      (question.minSelections !== null && answered < question.minSelections) ||
+      (question.maxSelections !== null && answered > question.maxSelections)
+    ) {
+      throw new Error(
+        question.selectionErrorMessage || "La cantidad de filas respondidas no es válida",
+      );
+    }
+  }
 
   if (question.type === "multi_choice" || (question.type === "image_choice" && Array.isArray(value))) {
     const selections = Array.isArray(value) ? [...new Set(value.map(String))] : [];
