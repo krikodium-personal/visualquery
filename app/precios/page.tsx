@@ -5,7 +5,7 @@ import { fill, getContent } from "@/components/marketing/content";
 import { MarketingNav } from "@/components/marketing/Nav";
 import { MarketingFooter } from "@/components/marketing/Sections";
 import { PricingPlans } from "@/components/pricing/PricingPlans";
-import { EXTRA_RESPONSE_PRICE_USD } from "@/lib/plans";
+import { EXTRA_AI_CREDITS_PRICE_PER_1000_USD, EXTRA_RESPONSES_PRICE_PER_1000_USD } from "@/lib/plans";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = getContent(await getLang()).pricing;
@@ -51,7 +51,10 @@ export default async function PricingPage({
           <div>
             <h2 className="font-semibold">{t.extraTitle}</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              {fill(t.extraText, { price: EXTRA_RESPONSE_PRICE_USD.toFixed(2) })}
+              {fill(t.extraText, {
+                price: EXTRA_RESPONSES_PRICE_PER_1000_USD,
+                ai: EXTRA_AI_CREDITS_PRICE_PER_1000_USD,
+              })}
             </p>
           </div>
           <div>

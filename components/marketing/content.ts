@@ -249,9 +249,9 @@ const es = {
     title: "Planes y precios",
     intro: "Empieza gratis y pasa a un plan de pago cuando necesites más respuestas, más enlaces o segmentación avanzada.",
     backToSurvey: "Volver a la encuesta",
-    extraTitle: "Respuestas adicionales",
+    extraTitle: "Uso adicional",
     extraText:
-      "Si superas el límite mensual de tu plan, cada respuesta extra cuesta US${price}. Las encuestas siguen funcionando: no se cortan a mitad del mes.",
+      "Si superas el límite mensual de respuestas de tu plan, cada 1.000 respuestas extra cuestan US${price}. Las encuestas siguen funcionando: no se cortan a mitad del mes. Los créditos de IA adicionales cuestan US${ai} cada 1.000.",
     soonTitle: "Próximamente",
     soon: [
       "Exportar a Excel y PDF",
@@ -278,9 +278,10 @@ const es = {
       free: {
         name: "Gratis",
         tagline: "Para probar la herramienta y armar encuestas sencillas.",
-        limits: ["3 encuestas", "10 preguntas por encuesta", "100 respuestas por mes", "1 enlace por encuesta"],
+        limits: ["3 encuestas", "10 preguntas por encuesta", "100 respuestas por mes", "1 enlace por encuesta", "50 créditos de IA por mes (≈ 4 encuestas / 40 preguntas)"],
         features: [
           "Canvas visual con ramificación por respuesta",
+          "Crear encuestas con IA: describe lo que necesitas y se arma el borrador",
           "Tipos de pregunta básicos",
           "Resumen por pregunta y respuestas individuales",
           "Exportar a CSV",
@@ -290,7 +291,7 @@ const es = {
       pro: {
         name: "Pro",
         tagline: "Para quien encuesta seguido y quiere una imagen propia.",
-        limits: ["Encuestas y preguntas ilimitadas", "2.000 respuestas por mes", "Hasta 5 enlaces por encuesta"],
+        limits: ["Encuestas y preguntas ilimitadas", "2.000 respuestas por mes", "Hasta 5 enlaces por encuesta", "700 créditos de IA por mes (≈ 65 encuestas / 650 preguntas)"],
         features: [
           "Todos los tipos de pregunta (ranking, matrices, mejor/peor, imagen…)",
           "Diseño completo: logo, colores, tipografías, fondos y pantallas de bienvenida/cierre",
@@ -306,7 +307,7 @@ const es = {
       business: {
         name: "Business",
         tagline: "Para estudios con segmentación y control de muestra.",
-        limits: ["20.000 respuestas por mes", "Enlaces ilimitados por encuesta"],
+        limits: ["20.000 respuestas por mes", "Enlaces ilimitados por encuesta", "2.200 créditos de IA por mes (≈ 200 encuestas / 2.000 preguntas)"],
         features: [
           "Todo lo de Pro",
           "Cupos por opción (cierra una opción al llenarse)",
@@ -319,7 +320,7 @@ const es = {
       enterprise: {
         name: "Enterprise",
         tagline: "Volumen alto, necesidades a medida.",
-        limits: ["Respuestas a medida", "Soporte prioritario"],
+        limits: ["Respuestas a medida", "Créditos de IA a medida", "Soporte prioritario"],
         features: ["Todo lo de Business", "Acuerdo y facturación a medida", "Implementaciones y migración asistida"],
       },
     } as Record<PlanId, PlanText>,
@@ -574,9 +575,9 @@ const en: Content = {
     title: "Plans and pricing",
     intro: "Start free and move to a paid plan when you need more responses, more links or advanced segmentation.",
     backToSurvey: "Back to the survey",
-    extraTitle: "Additional responses",
+    extraTitle: "Additional usage",
     extraText:
-      "If you go over your plan's monthly limit, each extra response costs US${price}. Your surveys keep working: they don't stop mid-month.",
+      "If you go over your plan's monthly response limit, every 1,000 extra responses cost US${price}. Your surveys keep working: they don't stop mid-month. Additional AI credits cost US${ai} per 1,000.",
     soonTitle: "Coming soon",
     soon: [
       "Export to Excel and PDF",
@@ -603,9 +604,10 @@ const en: Content = {
       free: {
         name: "Free",
         tagline: "To try the tool and build simple surveys.",
-        limits: ["3 surveys", "10 questions per survey", "100 responses per month", "1 link per survey"],
+        limits: ["3 surveys", "10 questions per survey", "100 responses per month", "1 link per survey", "50 AI credits per month (≈ 4 surveys / 40 questions)"],
         features: [
           "Visual canvas with branching by answer",
+          "Create surveys with AI: describe what you need and get a draft",
           "Basic question types",
           "Per-question summary and individual responses",
           "CSV export",
@@ -615,7 +617,7 @@ const en: Content = {
       pro: {
         name: "Pro",
         tagline: "For people who survey often and want their own look.",
-        limits: ["Unlimited surveys and questions", "2,000 responses per month", "Up to 5 links per survey"],
+        limits: ["Unlimited surveys and questions", "2,000 responses per month", "Up to 5 links per survey", "700 AI credits per month (≈ 65 surveys / 650 questions)"],
         features: [
           "All question types (ranking, matrices, best/worst, image…)",
           "Full design: logo, colors, fonts, backgrounds and welcome/closing screens",
@@ -631,7 +633,7 @@ const en: Content = {
       business: {
         name: "Business",
         tagline: "For studies that need segmentation and sample control.",
-        limits: ["20,000 responses per month", "Unlimited links per survey"],
+        limits: ["20,000 responses per month", "Unlimited links per survey", "2,200 AI credits per month (≈ 200 surveys / 2,000 questions)"],
         features: [
           "Everything in Pro",
           "Quotas per option (an option closes when full)",
@@ -644,7 +646,7 @@ const en: Content = {
       enterprise: {
         name: "Enterprise",
         tagline: "High volume, tailored needs.",
-        limits: ["Custom response volume", "Priority support"],
+        limits: ["Custom response volume", "Custom AI allowance", "Priority support"],
         features: ["Everything in Business", "Custom agreement and invoicing", "Assisted implementation and migration"],
       },
     },

@@ -323,6 +323,7 @@ model AiGeneration {
   model        String?
   inputTokens  Int?
   outputTokens Int?
+  questionCount Int? // questions in the generated survey (counts against the monthly AI allowance)
   createdAt    DateTime @default(now())
 
   @@index([userId, createdAt])

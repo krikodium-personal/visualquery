@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { CURRENT_ACCOUNT_PLAN, aiCredits, aiMonthlyLimit } from "@/lib/plans";
 import { createDraftSurvey } from "@/lib/ai/create-survey";
 import {
   AiInvalidError,
@@ -12,6 +13,10 @@ import {
 
 /** Generations per user per rolling 24 hours (override with AI_DAILY_LIMIT). */
 const DEFAULT_DAILY_LIMIT = 10;
+
+const MIN_QUESTIONS = 3;
+const EST_FIXED_CREDITS = 2.5;
+const EST_CREDITS_PER_QUESTION = 1.1;
 
 const bodySchema = z.object({
   description: z.string().trim().min(15, "Describe un poco más la encuesta que necesitas.").max(2500, "La descripción es demasiado larga."),
@@ -71,6 +76,29 @@ export async function POST(request: Request) {
     );
   }
 
+  // Monthly allowance in AI credits (token usage, output weighted 5x): cost follows tokens.
+  let questionCount = parsed.data.questionCount;
+  const monthlyLimit = aiMonthlyLimit(CURRENT_ACCOUNT_PLAN);
+  if (monthlyLimit !== null) {
+    const now = new Date();
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const usedMonth = await prisma.aiGeneration.aggregate({
+      where: { userId, createdAt: { gte: monthStart }, status: "succeeded" },
+      _sum: { inputTokens: true, outputTokens: true },
+    });
+    const remaining =
+      monthlyLimit - aiCredits(usedMonth._sum.inputTokens ?? 0, usedMonth._sum.outputTokens ?? 0);
+    // Conservative estimate from measured usage: fixed overhead + ~1 credit per question.
+    const affordable = Math.floor((remaining - EST_FIXED_CREDITS) / EST_CREDITS_PER_QUESTION);
+    if (affordable < MIN_QUESTIONS) {
+      return Response.json(
+        { error: `Usaste los ${monthlyLimit} créditos de IA de tu plan este mes. Se renuevan el día 1.` },
+        { status: 429 },
+      );
+    }
+    questionCount = Math.min(questionCount, affordable);
+  }
+
   const record = await prisma.aiGeneration.create({ data: { userId } });
   const encoder = new TextEncoder();
   const line = (value: object) => encoder.encode(`${JSON.stringify(value)}\n`);
@@ -80,7 +108,7 @@ export async function POST(request: Request) {
       const heartbeat = setInterval(() => controller.enqueue(line({ type: "progress" })), 8000);
       try {
         controller.enqueue(line({ type: "progress" }));
-        const result = await generateAiSurvey(parsed.data);
+        const result = await generateAiSurvey({ ...parsed.data, questionCount });
         const surveyId = await createDraftSurvey(userId, result.survey);
         await prisma.aiGeneration.update({
           where: { id: record.id },
@@ -90,6 +118,7 @@ export async function POST(request: Request) {
             model: result.model,
             inputTokens: result.inputTokens,
             outputTokens: result.outputTokens,
+            questionCount: result.survey.questions.length,
           },
         });
         controller.enqueue(line({ type: "done", surveyId }));
