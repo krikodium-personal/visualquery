@@ -19,6 +19,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
             Visualquery
           </Link>
           <DashboardHeaderActions>
+            <Link href="/precios" className="text-sm text-muted-foreground hover:text-foreground">
+              Planes
+            </Link>
             <NotificationCenter />
             <form
               action={async () => {

@@ -36,6 +36,7 @@ export default async function Home() {
             />
           </>
         )}
+        <Button size="lg" variant="ghost" nativeButton={false} render={<Link href="/precios">Planes</Link>} />
       </div>
     </div>
   );
