@@ -37,7 +37,9 @@ export type ThemePreset =
   | "warm"
   | "vibrant";
 export type SurfaceStyle = "solid" | "transparent" | "blur" | "glass";
-export type ProgressDisplay = "percentage" | "questions";
+/** What the progress bar shows next to it: percentage, "n/total", both, or just the bar. */
+export type ProgressDisplay = "percentage" | "questions" | "both" | "bar";
+export type ProgressPosition = "top" | "bottom";
 /** How respondents move to the next question after answering. */
 export type AdvanceMode = "tap" | "button";
 export type ColorMode = "light" | "dark";
@@ -300,7 +302,36 @@ export function parseSurfaceStyle(value: string): SurfaceStyle {
 }
 
 export function parseProgressDisplay(value: string): ProgressDisplay {
-  return value === "questions" ? "questions" : "percentage";
+  return value === "questions" || value === "both" || value === "bar" ? value : "percentage";
+}
+
+/** Respondent-facing display toggles from the editor's "Opciones" panel. */
+export interface SurveyOptions {
+  showTitle: boolean;
+  showQuestionNumbers: boolean;
+  showRequiredAsterisk: boolean;
+  progressPosition: ProgressPosition;
+}
+
+export const DEFAULT_SURVEY_OPTIONS: SurveyOptions = {
+  showTitle: false,
+  showQuestionNumbers: false,
+  showRequiredAsterisk: false,
+  progressPosition: "top",
+};
+
+export function surveyOptionsOf(survey: {
+  showTitle: boolean;
+  showQuestionNumbers: boolean;
+  showRequiredAsterisk: boolean;
+  progressPosition: string;
+}): SurveyOptions {
+  return {
+    showTitle: survey.showTitle,
+    showQuestionNumbers: survey.showQuestionNumbers,
+    showRequiredAsterisk: survey.showRequiredAsterisk,
+    progressPosition: survey.progressPosition === "bottom" ? "bottom" : "top",
+  };
 }
 
 export const ADVANCE_MODE_OPTIONS: { value: AdvanceMode; label: string }[] = [

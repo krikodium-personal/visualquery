@@ -14,6 +14,7 @@ import {
   parseProgressDisplay,
   parseSurfaceStyle,
   parseThemePreset,
+  surveyOptionsOf,
 } from "@/lib/survey-design";
 import { SurveyPreview } from "@/components/surveys/SurveyPreview";
 
@@ -66,6 +67,7 @@ export default async function SurveyPreviewPage({
       questions={questions}
       edges={edges}
       rootQuestionId={rootQuestion?.id ?? null}
+      options={surveyOptionsOf(survey)}
       design={{
         themePreset: parseThemePreset(survey.themePreset),
         themeColor: survey.themeColor,

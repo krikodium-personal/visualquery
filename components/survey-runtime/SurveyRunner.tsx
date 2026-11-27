@@ -36,6 +36,8 @@ import {
   readableTextOn,
   runnerBackgroundColor,
   type SurveyDesign,
+  type SurveyOptions,
+  DEFAULT_SURVEY_OPTIONS,
   type ThankYouImageMode,
 } from "@/lib/survey-design";
 import { cn } from "@/lib/utils";
@@ -109,6 +111,7 @@ export function SurveyRunner({
   edges,
   rootQuestionId,
   design,
+  options = DEFAULT_SURVEY_OPTIONS,
   preview = false,
   previewScreen,
   questionCodes,
@@ -130,6 +133,8 @@ export function SurveyRunner({
   edges: FlowEdge[];
   rootQuestionId: string | null;
   design: SurveyDesign;
+  /** Display toggles from the editor's «Opciones» panel (defaults: all off). */
+  options?: SurveyOptions;
   /** Simulates the flow locally without touching the database — used by the
    * editor's "Vista previa" so trying it out never creates real responses. */
   preview?: boolean;
@@ -408,6 +413,27 @@ export function SurveyRunner({
     );
   }
 
+  const showPercent = design.progressDisplay === "percentage" || design.progressDisplay === "both";
+  const showCount = design.progressDisplay === "questions" || design.progressDisplay === "both";
+  const progressNode = design.showProgress ? (
+    <Progress
+      value={computeProgress(currentQuestion.id, answeredCount, edges)}
+      className="[&_[data-slot=progress-indicator]]:bg-[var(--survey-theme)]"
+    >
+      {design.progressDisplay === "bar" ? null : (
+        <ProgressLabel className="text-xs font-normal text-muted-foreground">
+          Pregunta {questionCodes?.[currentQuestion.id] ?? answeredCount + 1}
+        </ProgressLabel>
+      )}
+      {showCount ? (
+        <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+          {questionProgress.current}/{questionProgress.total}
+        </span>
+      ) : null}
+      {showPercent ? <ProgressValue className={cn("text-xs", showCount && "ml-2")} /> : null}
+    </Progress>
+  ) : null;
+
   return (
     <CenteredCard
       {...shell}
@@ -424,25 +450,25 @@ export function SurveyRunner({
         <p className="-mt-2 text-sm text-muted-foreground">{description}</p>
       )}
 
-      {design.showProgress && (
-        <Progress
-          value={computeProgress(currentQuestion.id, answeredCount, edges)}
-          className="[&_[data-slot=progress-indicator]]:bg-[var(--survey-theme)]"
-        >
-          <ProgressLabel className="text-xs font-normal text-muted-foreground">
-            Pregunta {questionCodes?.[currentQuestion.id] ?? answeredCount + 1}
-          </ProgressLabel>
-          {design.progressDisplay === "questions" ? (
-            <span className="ml-auto text-xs text-muted-foreground tabular-nums">
-              {questionProgress.current}/{questionProgress.total}
-            </span>
-          ) : (
-            <ProgressValue className="text-xs" />
-          )}
-        </Progress>
-      )}
+      {options.showTitle && title ? (
+        <p className="-mb-2 text-sm font-medium text-muted-foreground">{title}</p>
+      ) : null}
 
-      <h2 className="text-3xl font-bold leading-tight tracking-tight">{currentQuestion.title}</h2>
+      {options.progressPosition === "top" ? progressNode : null}
+
+      <h2 className="text-3xl font-bold leading-tight tracking-tight">
+        {options.showQuestionNumbers ? (
+          <span className="mr-2 text-muted-foreground">
+            {questionCodes?.[currentQuestion.id] ?? answeredCount + 1}.
+          </span>
+        ) : null}
+        {currentQuestion.title}
+        {options.showRequiredAsterisk && currentQuestion.required ? (
+          <span className="ml-1 text-destructive" aria-label="obligatoria">
+            *
+          </span>
+        ) : null}
+      </h2>
 
       {currentQuestion.description?.trim() ? (
         <p className="-mt-2 whitespace-pre-line text-base text-muted-foreground">
@@ -496,6 +522,8 @@ export function SurveyRunner({
           </>
         );
       })()}
+
+      {options.progressPosition === "bottom" ? progressNode : null}
     </CenteredCard>
   );
 }

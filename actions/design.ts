@@ -96,7 +96,7 @@ const designSchema = z.object({
     "bottom-right",
   ]),
   showProgress: z.boolean(),
-  progressDisplay: z.enum(["percentage", "questions"]),
+  progressDisplay: z.enum(["percentage", "questions", "both", "bar"]),
   advanceMode: z.enum(["tap", "button"]),
   welcomeEnabled: z.boolean(),
   welcomeTitle: optionalText,

@@ -17,6 +17,7 @@ import {
   parseProgressDisplay,
   parseSurfaceStyle,
   parseThemePreset,
+  surveyOptionsOf,
 } from "@/lib/survey-design";
 import { SurveyRunner } from "@/components/survey-runtime/SurveyRunner";
 import { SurveyPasswordGate } from "@/components/surveys/SurveyPasswordGate";
@@ -158,6 +159,7 @@ export default async function PublicSurveyPage({
           questions={questions}
           edges={edges}
           rootQuestionId={rootQuestion?.id ?? null}
+          options={surveyOptionsOf(survey)}
           design={{
             themePreset: parseThemePreset(survey.themePreset),
             themeColor: survey.themeColor,

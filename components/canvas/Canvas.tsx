@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ChevronLeft, ChevronRight, Plus, Save, Eye, X, LayoutGrid } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Save, Eye, X, LayoutGrid, Settings, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   QuestionNode,
@@ -44,7 +44,11 @@ import {
   type SurveyPreviewState,
 } from "@/components/survey-runtime/SurveyRunner";
 import { computeLayout, placeNewQuestion } from "@/lib/layout";
-import type { SurveyDesign } from "@/lib/survey-design";
+import type { SurveyDesign, SurveyOptions } from "@/lib/survey-design";
+import { OptionsPanel, type OptionsState } from "@/components/canvas/OptionsPanel";
+import { CommentsPanel } from "@/components/canvas/CommentsPanel";
+import { updateSurveyOptions } from "@/actions/survey-options";
+import type { CommentItem } from "@/lib/comments";
 import { computeQuestionCodes } from "@/lib/question-codes";
 import { applyCanvasChanges } from "@/actions/canvas";
 
@@ -228,6 +232,9 @@ export function Canvas({
   title,
   description,
   design,
+  options,
+  initialComments,
+  currentUserId,
   questions,
   edges: surveyEdges,
 }: {
@@ -236,9 +243,33 @@ export function Canvas({
   description: string | null;
   status: "draft" | "published" | "closed";
   design: SurveyDesign;
+  options: SurveyOptions;
+  initialComments: CommentItem[];
+  currentUserId: string;
   questions: SurveyQuestion[];
   edges: SurveyEdge[];
 }) {
+  const [sidePanel, setSidePanel] = useState<"options" | "comments" | null>(null);
+  const [comments, setComments] = useState<CommentItem[]>(initialComments);
+  const [optionsState, setOptionsState] = useState<OptionsState>({
+    showProgress: design.showProgress,
+    progressDisplay: design.progressDisplay,
+    progressPosition: options.progressPosition,
+    showTitle: options.showTitle,
+    showQuestionNumbers: options.showQuestionNumbers,
+    showRequiredAsterisk: options.showRequiredAsterisk,
+  });
+  const liveDesign: SurveyDesign = {
+    ...design,
+    showProgress: optionsState.showProgress,
+    progressDisplay: optionsState.progressDisplay,
+  };
+  const liveOptions: SurveyOptions = {
+    progressPosition: optionsState.progressPosition,
+    showTitle: optionsState.showTitle,
+    showQuestionNumbers: optionsState.showQuestionNumbers,
+    showRequiredAsterisk: optionsState.showRequiredAsterisk,
+  };
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [dirty, setDirty] = useState(false);
   const [applying, setApplying] = useState(false);
@@ -758,6 +789,12 @@ export function Canvas({
     orderedQuestions.findIndex((question) => question.id === focusQuestionId),
   );
   const focusedQuestion = orderedQuestions[focusIndex] ?? null;
+  const openCommentCount = comments.filter((c) => !c.parentId && !c.resolved).length;
+  // Right-hand panels share the space with the live preview: opening one closes the other.
+  function toggleSidePanel(panel: "options" | "comments") {
+    setSidePanel((current) => (current === panel ? null : panel));
+    setPreviewOpen(false);
+  }
 
   const jumpToQuestion = useCallback(
     (questionId: string) => {
@@ -847,6 +884,7 @@ export function Canvas({
       setPreviewOpen(false);
       return;
     }
+    setSidePanel(null);
     const startId = resolvePreviewStartId();
     // Seed focus before mount so SurveyRunner's first paint matches selection.
     lastPreviewQuestionRef.current = startId;
@@ -1053,6 +1091,29 @@ export function Canvas({
             </Button>
             <Button
               size="sm"
+              variant={sidePanel === "options" ? "secondary" : "outline"}
+              onClick={() => toggleSidePanel("options")}
+              aria-pressed={sidePanel === "options"}
+            >
+              <Settings className="size-4" />
+              Opciones
+            </Button>
+            <Button
+              size="sm"
+              variant={sidePanel === "comments" ? "secondary" : "outline"}
+              onClick={() => toggleSidePanel("comments")}
+              aria-pressed={sidePanel === "comments"}
+            >
+              <MessageSquare className="size-4" />
+              Comentarios
+              {openCommentCount > 0 ? (
+                <span className="rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
+                  {openCommentCount}
+                </span>
+              ) : null}
+            </Button>
+            <Button
+              size="sm"
               variant={previewOpen ? "secondary" : "outline"}
               onClick={togglePreview}
               disabled={nodes.length === 0}
@@ -1189,12 +1250,38 @@ export function Canvas({
                 rootQuestionId={previewRootId}
                 questionCodes={questionCodesRecord}
                 previewFocusQuestionId={previewFocusQuestionId}
-                design={design}
+                design={liveDesign}
+                options={liveOptions}
                 onPreviewStateChange={handlePreviewState}
               />
             </div>
           </div>
         </aside>
+      ) : null}
+
+      {sidePanel === "options" ? (
+        <OptionsPanel
+          value={optionsState}
+          onChange={(next) => {
+            setOptionsState(next);
+            void updateSurveyOptions(surveyId, next).then((result) => {
+              if (result.error) toast.error(result.error);
+            });
+          }}
+          onClose={() => setSidePanel(null)}
+        />
+      ) : null}
+
+      {sidePanel === "comments" ? (
+        <CommentsPanel
+          surveyId={surveyId}
+          comments={comments}
+          onCommentsChange={setComments}
+          targets={orderedQuestions.map((q) => ({ id: q.id, code: q.code, title: q.title }))}
+          defaultQuestionId={null}
+          currentUserId={currentUserId}
+          onClose={() => setSidePanel(null)}
+        />
       ) : null}
     </div>
   );

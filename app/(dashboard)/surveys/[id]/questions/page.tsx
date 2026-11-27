@@ -13,6 +13,7 @@ import {
   parseProgressDisplay,
   parseSurfaceStyle,
   parseThemePreset,
+  surveyOptionsOf,
 } from "@/lib/survey-design";
 import { Canvas } from "@/components/canvas/Canvas";
 
@@ -26,7 +27,14 @@ export default async function SurveyQuestionsPage({
 
   const survey = await prisma.survey.findFirst({
     where: { id, ownerId: session!.user.id },
-    include: { questions: true, edges: true },
+    include: {
+      questions: true,
+      edges: true,
+      comments: {
+        orderBy: { createdAt: "asc" },
+        include: { author: { select: { name: true, email: true } } },
+      },
+    },
   });
 
   if (!survey) notFound();
@@ -91,6 +99,19 @@ export default async function SurveyQuestionsPage({
             thankYouImageUrl: survey.thankYouImageUrl,
             thankYouImageMode: parseThankYouImageMode(survey.thankYouImageMode),
           }}
+          options={surveyOptionsOf(survey)}
+          initialComments={survey.comments.map((c) => ({
+            id: c.id,
+            questionId: c.questionId,
+            parentId: c.parentId,
+            authorId: c.authorId,
+            authorName: c.author.name || c.author.email,
+            body: c.body,
+            resolved: c.resolvedAt !== null,
+            createdAt: c.createdAt.toISOString(),
+            updatedAt: c.updatedAt.toISOString(),
+          }))}
+          currentUserId={session!.user.id}
           questions={questions}
           edges={edges}
         />

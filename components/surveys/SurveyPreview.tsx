@@ -24,7 +24,7 @@ import type { QuestionOption } from "@/lib/question-options";
 import { isRatingLevel, isRatingMeta } from "@/lib/rating-options";
 import { type AnswerValue, type FlowEdge } from "@/lib/flow-engine";
 import { computeQuestionCodes } from "@/lib/question-codes";
-import type { SurveyDesign } from "@/lib/survey-design";
+import { DEFAULT_SURVEY_OPTIONS, type SurveyDesign, type SurveyOptions } from "@/lib/survey-design";
 import type { QuestionType } from "@/lib/question-types";
 import { cn } from "@/lib/utils";
 
@@ -117,6 +117,7 @@ export function SurveyPreview({
   edges,
   rootQuestionId,
   design,
+  options = DEFAULT_SURVEY_OPTIONS,
 }: {
   surveyId: string;
   title: string;
@@ -125,6 +126,7 @@ export function SurveyPreview({
   edges: FlowEdge[];
   rootQuestionId: string | null;
   design: SurveyDesign;
+  options?: SurveyOptions;
 }) {
   const [device, setDevice] = useState<Device>("desktop");
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -356,6 +358,7 @@ export function SurveyPreview({
                   edges={edges}
                   rootQuestionId={rootQuestionId}
                   design={design}
+                  options={options}
                   onPreviewStateChange={handlePreviewState}
                 />
               </div>
