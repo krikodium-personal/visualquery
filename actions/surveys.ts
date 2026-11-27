@@ -183,12 +183,6 @@ export async function duplicateSurvey(surveyId: string): Promise<string> {
       title: `${survey.title} (copia)`,
       slug: copySlug,
       status: "draft",
-      accessPassword: null,
-      responseLimit: null,
-      cutoffAt: null,
-      endRedirectUrl: null,
-      disqualifyMessage: null,
-      disqualifyRedirectUrl: null,
       analysisViews: [],
       collectors: { create: { name: "Enlace web 1", slug: copySlug } },
       customVariables: parseCustomVariables(survey.customVariables).map((variable) => ({

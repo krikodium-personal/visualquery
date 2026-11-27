@@ -61,12 +61,6 @@ model Survey {
   thankYouImageUrl  String?
   thankYouImageMode String @default("header") // header | background
 
-  // LEGACY: these now live on Collector (copied by the 20261127200000 migration). Kept only so
-  // the previously deployed code keeps working until they are dropped in a follow-up migration.
-  accessPassword String?
-  responseLimit  Int?
-  cutoffAt       DateTime?
-
   // Saved Análisis views (filters + compare groups), JSON array.
   analysisViews Json @default("[]")
 
@@ -74,11 +68,6 @@ model Survey {
   shareTitle       String?
   shareDescription String?
   shareImageUrl    String?
-
-  // LEGACY (moved to Collector, see above).
-  endRedirectUrl        String?
-  disqualifyMessage     String?
-  disqualifyRedirectUrl String?
 
   // URL parameters captured with each response: [{ name, label? }].
   customVariables Json @default("[]")
