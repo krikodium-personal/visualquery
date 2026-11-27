@@ -68,6 +68,7 @@ export function AccountMenu({
         <form action={signOutAction}>
           <DropdownMenuItem
             className="cursor-pointer gap-2 px-2 py-2"
+            nativeButton
             render={<button type="submit" className="w-full" />}
           >
             <LogOut className="size-4 text-muted-foreground" />

@@ -94,43 +94,77 @@ export async function deleteContacts(ids: string[]): Promise<ActionResult> {
   return {};
 }
 
-/** Adds the contacts found in the text; existing emails are kept (not duplicated). */
+export type ImportOptions = {
+  /** Add every imported contact to this group (existing id, or a name to find/create). */
+  group?: { id?: string; newName?: string };
+  includesLanguage: boolean;
+  /** What to do with emails that already exist. */
+  onExisting: "update" | "ignore";
+};
+
+/** Adds the contacts found in the text, handling emails that already exist per `onExisting`. */
 export async function importContacts(
   text: string,
-  groupId?: string,
-): Promise<ActionResult & { added?: number; existing?: number; invalid?: number }> {
+  options: ImportOptions,
+): Promise<ActionResult & { added?: number; updated?: number; ignored?: number; invalid?: number }> {
   const userId = await requireUserId();
   if (!userId) return { error: "No autenticado" };
-  const { rows, invalid } = parseContactsText(text);
+  const { rows, invalid } = parseContactsText(text, options.includesLanguage);
   if (rows.length === 0) return { error: "No encontré ningún email válido" };
   if (rows.length > MAX_IMPORT_ROWS) return { error: `Importá hasta ${MAX_IMPORT_ROWS} contactos por vez` };
+
+  let groupId: string | null = null;
+  if (options.group?.newName !== undefined) {
+    const name = groupNameSchema.safeParse(options.group.newName);
+    if (!name.success) return { error: name.error.issues[0].message };
+    const found = await prisma.contactGroup.findUnique({ where: { userId_name: { userId, name: name.data } } });
+    groupId = found ? found.id : (await prisma.contactGroup.create({ data: { userId, name: name.data } })).id;
+  } else if (options.group?.id) {
+    const found = await prisma.contactGroup.findFirst({ where: { id: options.group.id, userId }, select: { id: true } });
+    if (!found) return { error: "Grupo no encontrado" };
+    groupId = found.id;
+  }
 
   const unique = [...new Map(rows.map((row) => [row.email, row])).values()];
   const found = await prisma.contact.findMany({
     where: { userId, email: { in: unique.map((row) => row.email) } },
     select: { id: true, email: true },
   });
-  const known = new Set(found.map((c) => c.email));
+  const known = new Map(found.map((c) => [c.email, c.id]));
   const fresh = unique.filter((row) => !known.has(row.email));
+  const existing = unique.filter((row) => known.has(row.email));
+
   if (fresh.length > 0) {
     await prisma.contact.createMany({ data: fresh.map((row) => ({ ...row, userId })) });
   }
-
-  if (groupId) {
-    const group = await prisma.contactGroup.findFirst({ where: { id: groupId, userId }, select: { id: true } });
-    if (group) {
-      const all = await prisma.contact.findMany({
-        where: { userId, email: { in: unique.map((row) => row.email) } },
-        select: { id: true },
-      });
-      await prisma.contactGroupMember.createMany({
-        data: all.map((c) => ({ contactId: c.id, groupId: group.id })),
-        skipDuplicates: true,
-      });
+  if (options.onExisting === "update") {
+    // Only overwrite the fields the file actually provides.
+    for (const row of existing) {
+      const { email, ...fields } = row;
+      const data = Object.fromEntries(Object.entries(fields).filter(([, value]) => value));
+      if (Object.keys(data).length > 0) {
+        await prisma.contact.updateMany({ where: { id: known.get(email), userId }, data });
+      }
     }
   }
+
+  if (groupId) {
+    const all = await prisma.contact.findMany({
+      where: { userId, email: { in: unique.map((row) => row.email) } },
+      select: { id: true },
+    });
+    await prisma.contactGroupMember.createMany({
+      data: all.map((c) => ({ contactId: c.id, groupId: groupId! })),
+      skipDuplicates: true,
+    });
+  }
   refresh();
-  return { added: fresh.length, existing: unique.length - fresh.length, invalid };
+  return {
+    added: fresh.length,
+    updated: options.onExisting === "update" ? existing.length : 0,
+    ignored: options.onExisting === "ignore" ? existing.length : 0,
+    invalid,
+  };
 }
 
 export async function createGroup(name: string): Promise<ActionResult> {

@@ -9,7 +9,6 @@ import {
   createGroup,
   deleteContacts,
   deleteGroup,
-  importContacts,
   removeContactsFromGroup,
   renameGroup,
   updateContact,
@@ -31,9 +30,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import type { ActionResult } from "@/lib/action-result";
 import type { ContactInput, ContactRow } from "@/lib/contacts";
+import { ImportContactsDialog } from "@/components/contacts/ImportContactsDialog";
 import { CONTACT_LANGUAGES, languageLabel } from "@/lib/languages";
 import { cn } from "@/lib/utils";
 
@@ -138,8 +137,8 @@ export function ContactsManager({ contacts, groups }: { contacts: ContactRow[]; 
               <DropdownMenu>
                 <DropdownMenuTrigger render={<Button />}>Agregar contactos</DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setDialog({ kind: "contact", contact: null })}>Agregar uno</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setDialog({ kind: "import" })}>Pegar o importar lista</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setDialog({ kind: "contact", contact: null })}>Agregar un solo contacto</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setDialog({ kind: "import" })}>Importar múltiples contactos</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -248,24 +247,14 @@ export function ContactsManager({ contacts, groups }: { contacts: ContactRow[]; 
         onDelete={(id) => run(() => deleteContacts([id]), "Contacto eliminado")}
       />
       ) : null}
-      <ImportDialog
-        open={dialog?.kind === "import"}
-        pending={pending}
-        groupName={activeGroup?.name ?? null}
-        onClose={() => setDialog(null)}
-        onSubmit={(text) =>
-          start(async () => {
-            const result = await importContacts(text, activeGroup?.id);
-            if (result.error) return void toast.error(result.error);
-            toast.success(
-              `${result.added} agregado${result.added === 1 ? "" : "s"}` +
-                (result.existing ? `, ${result.existing} ya existía${result.existing === 1 ? "" : "n"}` : "") +
-                (result.invalid ? `, ${result.invalid} inválido${result.invalid === 1 ? "" : "s"}` : ""),
-            );
-            setDialog(null);
-          })
-        }
-      />
+      {dialog?.kind === "import" ? (
+        <ImportContactsDialog
+          open
+          groups={groups}
+          defaultGroupId={activeGroup?.id ?? ""}
+          onClose={() => setDialog(null)}
+        />
+      ) : null}
       <GroupDialog
         key={`group-${dialog?.kind === "group" ? (dialog.group?.id ?? "new") : "closed"}`}
         open={dialog?.kind === "group"}
@@ -425,41 +414,6 @@ function ContactDialog({
           ) : null}
           <Button variant="outline" disabled={pending} onClick={onClose}>Cancelar</Button>
           <Button type="submit" form="contact-form" disabled={pending}>Guardar</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function ImportDialog({
-  open, pending, groupName, onClose, onSubmit,
-}: { open: boolean; pending: boolean; groupName: string | null; onClose: () => void; onSubmit: (text: string) => void }) {
-  const [text, setText] = useState("");
-  return (
-    <Dialog open={open} onOpenChange={(next) => !pending && !next && onClose()}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Pegar o importar lista</DialogTitle>
-          <DialogDescription>
-            Un contacto por línea: correo, nombre, apellido e idioma (separados por coma, punto y
-            coma o tabulación). Los correos que ya tenés se omiten.
-            {groupName ? ` Se agregan también al grupo «${groupName}».` : ""}
-          </DialogDescription>
-        </DialogHeader>
-        <Textarea rows={8} value={text} onChange={(e) => setText(e.target.value)} placeholder={"ana@ejemplo.com, Ana, Pérez, es\nluis@ejemplo.com"} />
-        <input
-          type="file"
-          accept=".csv,.txt"
-          aria-label="Cargar archivo CSV"
-          className="text-sm"
-          onChange={async (event) => {
-            const file = event.target.files?.[0];
-            if (file) setText(await file.text());
-          }}
-        />
-        <DialogFooter>
-          <Button variant="outline" disabled={pending} onClick={onClose}>Cancelar</Button>
-          <Button disabled={pending || !text.trim()} onClick={() => onSubmit(text)}>Agregar</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
