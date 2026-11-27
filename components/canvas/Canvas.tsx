@@ -38,7 +38,7 @@ import {
   type QuestionNodeData,
   type QuestionOption,
 } from "./QuestionNode";
-import { EditQuestionPanel, type QuestionFormValues } from "./EditQuestionPanel";
+import { EditQuestionPanel, type NewQuestionGroup, type QuestionFormValues } from "./EditQuestionPanel";
 import {
   SurveyRunner,
   type SurveyPreviewState,
@@ -306,6 +306,8 @@ export function Canvas({
   const canvasColorMode = resolvedTheme === "dark" ? "dark" : "light";
 
   const initialNodes = useMemo(() => buildInitialNodes(questions), []); // eslint-disable-line react-hooks/exhaustive-deps
+  /** Positions as last saved, to tell a real move from a plain click on a card. */
+  const savedPositionsRef = useRef(new Map(initialNodes.map((n) => [n.id, n.position])));
   const initialEdges = useMemo(() => buildInitialEdges(questions, surveyEdges), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [nodes, setNodes, onNodesChangeBase] = useNodesState<QuestionNode>(initialNodes);
@@ -505,8 +507,10 @@ export function Canvas({
               current && questionIdMap[current] ? questionIdMap[current]! : current,
             );
           }
+          savedPositionsRef.current = new Map(nextNodes.map((n) => [n.id, n.position]));
           setDirty(false);
           if (capturedOptions?.successToast) toast.success(capturedOptions.successToast);
+          return questionIdMap;
         } catch (error) {
           setDirty(true);
           toast.error(
@@ -546,6 +550,11 @@ export function Canvas({
     [commitGraph, persistGraph],
   );
 
+  const movedSinceSave = useCallback((id: string, position: { x: number; y: number }) => {
+    const saved = savedPositionsRef.current.get(id);
+    return !saved || saved.x !== position.x || saved.y !== position.y;
+  }, []);
+
   const onNodesChange = useCallback(
     (changes: NodeChange<QuestionNode>[]) => {
       // Group boxes are derived from their cards, so dragging one moves the cards instead.
@@ -557,7 +566,12 @@ export function Canvas({
         }
         if (change.type !== "position") continue;
         if (change.dragging === false) {
-          setDirty(true);
+          const memberIds = Object.entries(membershipRef.current)
+            .filter(([, g]) => g === change.id.slice(GROUP_ID_PREFIX.length))
+            .map(([q]) => q);
+          if (nodesRef.current.some((n) => memberIds.includes(n.id) && movedSinceSave(n.id, n.position))) {
+            setDirty(true);
+          }
           continue;
         }
         const groupId = change.id.slice(GROUP_ID_PREFIX.length);
@@ -576,11 +590,16 @@ export function Canvas({
         );
       }
       onNodesChangeBase(cardChanges);
-      if (cardChanges.some((c) => c.type === "position" && c.dragging === false)) {
+      // A plain click also ends with a "drag stopped" event; only a real move is an unsaved change.
+      if (
+        cardChanges.some(
+          (c) => c.type === "position" && c.dragging === false && c.position && movedSinceSave(c.id, c.position),
+        )
+      ) {
         setDirty(true);
       }
     },
-    [onNodesChangeBase, setNodes],
+    [onNodesChangeBase, setNodes, movedSinceSave],
   );
 
   const onEdgesChange = useCallback(
@@ -672,7 +691,7 @@ export function Canvas({
   );
 
   const handleCreateSubmit = useCallback(
-    async (values: QuestionFormValues) => {
+    async (values: QuestionFormValues, group?: NewQuestionGroup) => {
       if (!dialog) return;
 
       if (dialog.mode === "edit") {
@@ -791,11 +810,36 @@ export function Canvas({
       const nextNodes = [...nodesRef.current, newNode];
       newEdges = applyOptionLogic(newEdges, newId, values.optionLogic, values.options);
       commitGraph(nextNodes, newEdges);
-      await persistGraph(nextNodes, newEdges, { successToast: "Pregunta guardada" });
-      setFocusQuestionId(newId);
-      centerViewportOnQuestion(newId, position);
+      // Joining the source card's group shows up at once; saving it follows the question's own save.
+      const sourceGroupId = dialog.mode === "create-after" ? membershipRef.current[dialog.afterQuestionId] : undefined;
+      if (group?.mode === "same" && sourceGroupId) {
+        setMembership((current) => ({ ...current, [newId]: sourceGroupId }));
+      }
+      const idMap = await persistGraph(nextNodes, newEdges, { successToast: "Pregunta guardada" });
+      const savedId = idMap?.[newId] ?? newId;
+      if (group?.mode === "same" && sourceGroupId) {
+        const result = await setQuestionsGroup(surveyId, [savedId], sourceGroupId);
+        if (result.error) {
+          toast.error(result.error);
+          setMembership((current) => Object.fromEntries(Object.entries(current).filter(([q]) => q !== savedId)));
+        }
+      } else if (group?.mode === "new") {
+        const result = await createQuestionGroup(surveyId, group.name, [savedId]);
+        if (result.error || !result.id) {
+          toast.error(result.error ?? "No se pudo crear el grupo");
+        } else {
+          const createdId = result.id;
+          setGroups((current) => [
+            ...current,
+            { id: createdId, name: group.name, color: GROUP_COLORS[current.length % GROUP_COLORS.length] },
+          ]);
+          setMembership((current) => ({ ...current, [savedId]: createdId }));
+        }
+      }
+      setFocusQuestionId(savedId);
+      centerViewportOnQuestion(savedId, position);
     },
-    [dialog, commitGraph, persistGraph, centerViewportOnQuestion],
+    [dialog, commitGraph, persistGraph, centerViewportOnQuestion, surveyId],
   );
 
   const handleApply = useCallback(async () => {
@@ -979,7 +1023,18 @@ export function Canvas({
     [orderedQuestions, focusIndex, jumpToQuestion],
   );
 
+  const newQuestionGroupContext = (() => {
+    if (!dialog || dialog.mode !== "create-after") return null;
+    const groupId = membership[dialog.afterQuestionId];
+    const group = groupId ? groups.find((g) => g.id === groupId) : undefined;
+    return group ? { name: group.name } : null;
+  })();
+
+  const selectedCardIds = useMemo(() => nodes.filter((n) => n.selected).map((n) => n.id), [nodes]);
+
   const [groupPending, setGroupPending] = useState(false);
+  /** Group under the card being dragged (it will join that group on drop). */
+  const [dropGroupId, setDropGroupId] = useState<string | null>(null);
 
   function handleRenameGroup(id: string, name: string) {
     const previous = groups.find((g) => g.id === id)?.name;
@@ -1000,7 +1055,7 @@ export function Canvas({
     });
   }
 
-  async function handleGroupConfirm(ids: string[], choice: GroupChoice) {
+  async function handleGroupConfirm(ids: string[], choice: GroupChoice, successMessage = "Grupo actualizado") {
     setGroupPending(true);
     try {
       let targetId: string;
@@ -1028,10 +1083,22 @@ export function Canvas({
       // Groups left empty by moving cards out disappear on both sides.
       setGroups((current) => current.filter((g) => g.id === targetId || Object.values({ ...membershipRef.current, ...Object.fromEntries(ids.map((q) => [q, targetId])) }).includes(g.id)));
       setGroupDialog(null);
-      toast.success("Grupo actualizado");
+      toast.success(successMessage);
     } finally {
       setGroupPending(false);
     }
+  }
+
+  function handleGroupClick() {
+    if (selectedCardIds.length === 0) {
+      toast.error("Primero selecciona las preguntas que quieres agrupar", {
+        description:
+          "Haz clic en una pregunta y suma otras manteniendo Shift + clic, o mantén Shift y arrastra un recuadro sobre el canvas. Después pulsa Agrupar y elige el nombre del grupo.",
+        duration: 9000,
+      });
+      return;
+    }
+    setGroupDialog({ ids: selectedCardIds });
   }
 
   async function handleRemoveFromGroup(ids: string[]) {
@@ -1044,8 +1111,6 @@ export function Canvas({
     setMembership(next);
     setGroups((current) => current.filter((g) => Object.values(next).includes(g.id)));
   }
-
-  const selectedCardIds = useMemo(() => nodes.filter((n) => n.selected).map((n) => n.id), [nodes]);
 
   const groupNodes = useMemo(() => {
     const result: GroupFlowNode[] = [];
@@ -1078,6 +1143,7 @@ export function Canvas({
           name: group.name,
           color: group.color,
           count: members.length,
+          highlight: group.id === dropGroupId,
           onRename: (name: string) => handleRenameGroup(group.id, name),
           onUngroup: () => handleUngroup(group.id),
         },
@@ -1085,7 +1151,57 @@ export function Canvas({
     }
     return result;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groups, membership, nodes]);
+  }, [groups, membership, nodes, dropGroupId]);
+
+  /** The other group whose box holds the centre of the dragged card, if any. */
+  function groupUnderCard(node: { id: string; position: { x: number; y: number }; measured?: { width?: number; height?: number } }) {
+    const cx = node.position.x + (node.measured?.width ?? DEFAULT_CARD_SIZE.width) / 2;
+    const cy = node.position.y + (node.measured?.height ?? DEFAULT_CARD_SIZE.height) / 2;
+    const own = membershipRef.current[node.id];
+    for (const box of groupNodes) {
+      const groupId = box.id.slice(GROUP_ID_PREFIX.length);
+      if (groupId === own) continue;
+      const w = box.width ?? 0;
+      const h = box.height ?? 0;
+      if (cx >= box.position.x && cx <= box.position.x + w && cy >= box.position.y && cy <= box.position.y + h) {
+        return groupId;
+      }
+    }
+    return null;
+  }
+
+  function handleNodeDrag(_event: unknown, node: QuestionNode) {
+    if (node.type !== "question") return;
+    const target = groupUnderCard(node);
+    setDropGroupId((current) => (current === target ? current : target));
+  }
+
+  function handleNodeDragStop(_event: unknown, node: QuestionNode, dragged: QuestionNode[]) {
+    const target = dropGroupId;
+    setDropGroupId(null);
+    if (!target || node.type !== "question") return;
+    const ids = (dragged.length > 0 ? dragged : [node]).filter((n) => n.type === "question").map((n) => n.id);
+    const name = groups.find((g) => g.id === target)?.name ?? "";
+
+    // Optimistic: the card joins the group on screen right away; saving happens in the background
+    // and is rolled back (with a message) if the server refuses.
+    const previousMembership = membershipRef.current;
+    const previousGroups = groups;
+    const nextMembership = { ...previousMembership, ...Object.fromEntries(ids.map((q) => [q, target])) };
+    setMembership(nextMembership);
+    setGroups((current) => current.filter((g) => Object.values(nextMembership).includes(g.id)));
+
+    void setQuestionsGroup(surveyId, ids, target)
+      .then((result) => {
+        if (result.error) throw new Error(result.error);
+        toast.success(`Agregada al grupo «${name}»`);
+      })
+      .catch((error: unknown) => {
+        setMembership(previousMembership);
+        setGroups(previousGroups);
+        toast.error(error instanceof Error ? error.message : "No se pudo agregar la pregunta al grupo");
+      });
+  }
 
   useEffect(() => {
     groupBoxesRef.current = new Map(
@@ -1245,6 +1361,10 @@ export function Canvas({
           edgesReconnectable
           reconnectRadius={EDGE_RECONNECT_RADIUS}
           elevateEdgesOnSelect
+          onNodeDrag={handleNodeDrag as never}
+          onNodeDragStop={handleNodeDragStop as never}
+          multiSelectionKeyCode="Shift"
+          selectionKeyCode="Shift"
           nodeTypes={nodeTypes}
           fitView
           fitViewOptions={{ maxZoom: 1 }}
@@ -1259,18 +1379,19 @@ export function Canvas({
                 Hay cambios sin guardar
               </span>
             )}
-            {selectedCardIds.length > 0 ? (
-              <>
-                <Button size="sm" variant="outline" onClick={() => setGroupDialog({ ids: selectedCardIds })}>
-                  <Group className="size-4" />
-                  Agrupar{selectedCardIds.length > 1 ? ` (${selectedCardIds.length})` : ""}
-                </Button>
-                {selectedCardIds.some((id) => membership[id]) ? (
-                  <Button size="sm" variant="ghost" onClick={() => void handleRemoveFromGroup(selectedCardIds)}>
-                    Quitar del grupo
-                  </Button>
-                ) : null}
-              </>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleGroupClick}
+              disabled={nodes.length === 0}
+            >
+              <Group className="size-4" />
+              Agrupar{selectedCardIds.length > 1 ? ` (${selectedCardIds.length})` : ""}
+            </Button>
+            {selectedCardIds.some((id) => membership[id]) ? (
+              <Button size="sm" variant="ghost" onClick={() => void handleRemoveFromGroup(selectedCardIds)}>
+                Quitar del grupo
+              </Button>
             ) : null}
             <Button size="sm" variant="outline" onClick={handleAlign} disabled={nodes.length === 0}>
               <LayoutGrid className="size-4" />
@@ -1407,6 +1528,7 @@ export function Canvas({
           initialValues={initialValues}
           code={editingCode}
           logicTargets={logicTargets}
+          groupContext={newQuestionGroupContext}
           onSubmit={handleCreateSubmit}
         />
       </div>

@@ -10,6 +10,8 @@ export type GroupNodeData = {
   name: string;
   color: GroupColor;
   count: number;
+  /** A card is being dragged over this group: it will be added on drop. */
+  highlight?: boolean;
   onRename: (name: string) => void;
   onUngroup: () => void;
   [key: string]: unknown;
@@ -54,7 +56,13 @@ export function GroupNode({ data }: NodeProps<GroupFlowNode>) {
   }
 
   return (
-    <div className={cn("pointer-events-none h-full w-full rounded-2xl border-2 border-dashed", tone.box)}>
+    <div
+      className={cn(
+        "pointer-events-none h-full w-full rounded-2xl border-2 border-dashed transition-shadow",
+        tone.box,
+        data.highlight && "border-solid shadow-[0_0_0_6px] shadow-foreground/15 ring-2 ring-foreground/60",
+      )}
+    >
       <div
         className={cn(
           "group-drag-handle pointer-events-auto flex h-9 cursor-grab items-center gap-2 rounded-t-[13px] px-3 text-sm font-semibold active:cursor-grabbing",
@@ -83,6 +91,9 @@ export function GroupNode({ data }: NodeProps<GroupFlowNode>) {
             {data.name}
           </span>
         )}
+        {data.highlight ? (
+          <span className="shrink-0 rounded-full bg-foreground px-2 py-0.5 text-xs font-medium text-background">Suelta para agregar</span>
+        ) : null}
         <span className="shrink-0 text-xs font-normal opacity-70">{data.count}</span>
         {editing ? (
           <button type="button" aria-label="Guardar nombre" onMouseDown={(e) => e.preventDefault()} onClick={commit} className="nodrag rounded p-1 hover:bg-background/50">

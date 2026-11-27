@@ -87,7 +87,7 @@ export function GroupDialog({
             Cancelar
           </Button>
           <Button type="submit" form="group-form" disabled={pending || !canConfirm}>
-            Agrupar
+            {pending ? "Agrupando..." : "Agrupar"}
           </Button>
         </DialogFooter>
       </DialogContent>

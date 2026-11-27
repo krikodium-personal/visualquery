@@ -249,12 +249,16 @@ function supportsOtherNone(type: QuestionType): boolean {
   return type === "single_choice" || type === "multi_choice" || type === "dropdown";
 }
 
+/** Where a brand-new question goes when it is created from a card that sits in a group. */
+export type NewQuestionGroup = { mode: "same" } | { mode: "new"; name: string } | { mode: "none" };
+
 export function EditQuestionPanel({
   open,
   onOpenChange,
   initialValues,
   code,
   logicTargets = [],
+  groupContext = null,
   onSubmit,
 }: {
   open: boolean;
@@ -262,7 +266,9 @@ export function EditQuestionPanel({
   initialValues?: QuestionFormValues;
   code?: string;
   logicTargets?: LogicTarget[];
-  onSubmit: (values: QuestionFormValues) => Promise<void>;
+  /** Set when the new question comes out of a card inside this group. */
+  groupContext?: { name: string } | null;
+  onSubmit: (values: QuestionFormValues, group?: NewQuestionGroup) => Promise<void>;
 }) {
   const [tab, setTab] = useState<EditorTab>("edit");
   const [title, setTitle] = useState("");
@@ -281,6 +287,8 @@ export function EditQuestionPanel({
   const [keepLastOption, setKeepLastOption] = useState(false);
   const [optionLogic, setOptionLogic] = useState<Record<string, string | null>>({});
   const [saving, setSaving] = useState(false);
+  const [groupMode, setGroupMode] = useState<"same" | "new" | "none">("same");
+  const [newGroupName, setNewGroupName] = useState("");
 
   const [wasOpen, setWasOpen] = useState(open);
   if (open !== wasOpen) {
@@ -288,6 +296,8 @@ export function EditQuestionPanel({
     if (open) {
       const nextType = initialValues?.type ?? "single_choice";
       setTab("edit");
+      setGroupMode("same");
+      setNewGroupName("");
       setTitle(initialValues?.title ?? "");
       setType(nextType);
       setOptions(optionsForEdit(nextType, initialValues?.options));
@@ -689,7 +699,7 @@ export function EditQuestionPanel({
         keepLastOption:
           OPTION_BASED_TYPES.includes(type) && randomizeOptions ? keepLastOption : false,
         optionLogic: cleanedLogic,
-      });
+      }, groupContext ? (groupMode === "new" ? { mode: "new", name: newGroupName.trim() } : { mode: groupMode }) : undefined);
       onOpenChange(false);
     } finally {
       setSaving(false);
@@ -1466,6 +1476,35 @@ export function EditQuestionPanel({
                 </>
               )}
             </div>
+          ) : null}
+
+          {tab === "edit" && groupContext ? (
+            <fieldset className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-3 text-sm">
+              <legend className="px-1 text-sm font-medium">¿Dónde va la nueva pregunta?</legend>
+              <label className="flex items-center gap-2">
+                <input type="radio" name="new-question-group" checked={groupMode === "same"} onChange={() => setGroupMode("same")} />
+                Dentro del grupo «{groupContext.name}»
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="radio" name="new-question-group" checked={groupMode === "new"} onChange={() => setGroupMode("new")} />
+                En un grupo nuevo
+              </label>
+              {groupMode === "new" ? (
+                <Input
+                  value={newGroupName}
+                  onChange={(e) => setNewGroupName(e.target.value)}
+                  maxLength={60}
+                  required
+                  placeholder="Nombre del grupo nuevo"
+                  aria-label="Nombre del grupo nuevo"
+                  className="ml-6 w-auto"
+                />
+              ) : null}
+              <label className="flex items-center gap-2">
+                <input type="radio" name="new-question-group" checked={groupMode === "none"} onChange={() => setGroupMode("none")} />
+                Sin grupo
+              </label>
+            </fieldset>
           ) : null}
 
           <DialogFooter>
