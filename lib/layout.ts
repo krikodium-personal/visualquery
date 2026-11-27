@@ -20,7 +20,7 @@ export interface NodePosition {
 }
 
 const COLUMN_WIDTH = 320;
-const VERTICAL_GAP = 48;
+const VERTICAL_GAP = 72;
 const DEFAULT_CARD_HEIGHT = 170;
 
 /**
@@ -161,4 +161,28 @@ export function placeNewQuestion(
   }
 
   return candidate;
+}
+
+/** Space a group's frame (padding on both sides plus its header) needs between neighbouring groups. */
+export const GROUP_FRAME_GAP = 2 * 32 + 40;
+
+/**
+ * Group frames wrap their cards with padding and a header. Walking the cards top to bottom, every time the
+ * group changes (or a card enters/leaves a group) everything below moves down so frames never overlap.
+ */
+export function separateGroups(
+  positions: Map<string, NodePosition>,
+  groupOf: (id: string) => string | null | undefined,
+  gap: number = GROUP_FRAME_GAP,
+): Map<string, NodePosition> {
+  const result = new Map<string, NodePosition>();
+  let carried = 0;
+  let previous: string | null | undefined;
+  for (const [id, position] of [...positions.entries()].sort((a, b) => a[1].y - b[1].y)) {
+    const group = groupOf(id) ?? null;
+    if (previous !== undefined && group !== previous && (group || previous)) carried += gap;
+    previous = group;
+    result.set(id, { x: position.x, y: position.y + carried });
+  }
+  return result;
 }

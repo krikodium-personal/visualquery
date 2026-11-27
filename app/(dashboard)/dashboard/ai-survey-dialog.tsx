@@ -81,7 +81,7 @@ export function AiSurveyDialog() {
             finished = true;
             toast.success("Encuesta creada. Revísala y ajústala antes de publicar.");
             setOpen(false);
-            router.push(`/surveys/${event.surveyId}/questions`);
+            router.push(`/surveys/${event.surveyId}/questions?align=1`);
           } else if (event.type === "error") {
             throw new Error(event.message ?? "No se pudo crear la encuesta.");
           }

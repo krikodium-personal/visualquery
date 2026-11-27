@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { computeLayout } from "@/lib/layout";
+import { computeLayout, separateGroups } from "@/lib/layout";
 import { slugify } from "@/lib/slug";
 import { defaultRatingOptions } from "@/lib/rating-options";
 import { nextGroupColor } from "@/lib/question-groups";
@@ -56,9 +56,9 @@ export async function createDraftSurvey(ownerId: string, ai: AiSurvey): Promise<
   // The canvas measures cards once rendered; here we only estimate their height from the options they list.
   const estimatedHeight = (key: string, type: string) => {
     const rows = (AI_OPTION_TYPES as readonly string[]).includes(type) ? (optionsByKey.get(key)?.length ?? 0) : 0;
-    return 120 + rows * 26 + (type === "rating" || type === "slider" ? 30 : 0);
+    return 170 + rows * 32 + (type === "rating" || type === "slider" ? 30 : 0);
   };
-  const positions = computeLayout(
+  const laidOut = computeLayout(
     ai.questions.map((q) => ({
       id: q.key,
       isRoot: q.key === first,
@@ -68,17 +68,9 @@ export async function createDraftSurvey(ownerId: string, ai: AiSurvey): Promise<
     edges.map((e) => ({ sourceQuestionId: e.source, targetQuestionId: e.target, sourceOptionValue: e.optionValue })),
   );
 
-  // Group boxes wrap their cards with padding and a header: leave room so neighbouring boxes do not overlap.
-  const GROUP_GAP = 2 * 32 + 40;
+  // Group frames need room around their cards so neighbouring groups do not overlap.
   const groupOf = (key: string) => ai.questions.find((q) => q.key === key)?.group?.trim().toLowerCase() ?? null;
-  let carried = 0;
-  let previousGroup: string | null | undefined;
-  for (const [key, position] of [...positions.entries()].sort((a, b) => a[1].y - b[1].y)) {
-    const group = groupOf(key);
-    if (previousGroup !== undefined && group !== previousGroup && (group || previousGroup)) carried += GROUP_GAP;
-    previousGroup = group;
-    positions.set(key, { x: position.x, y: position.y + carried });
-  }
+  const positions = separateGroups(laidOut, groupOf);
 
   const groupNames: string[] = [];
   for (const q of ai.questions) {

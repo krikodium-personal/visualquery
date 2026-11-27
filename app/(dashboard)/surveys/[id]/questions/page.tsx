@@ -20,10 +20,13 @@ import { Canvas } from "@/components/canvas/Canvas";
 
 export default async function SurveyQuestionsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { id } = await params;
+  const autoAlign = (await searchParams).align === "1";
   const session = await auth();
 
   const survey = await prisma.survey.findFirst({
@@ -105,6 +108,7 @@ export default async function SurveyQuestionsPage({
           initialMembership={Object.fromEntries(
             survey.questions.flatMap((q) => (q.groupId ? [[q.id, q.groupId]] : [])),
           )}
+          autoAlign={autoAlign}
           options={surveyOptionsOf(survey)}
           initialComments={survey.comments.map((c) => ({
             id: c.id,
