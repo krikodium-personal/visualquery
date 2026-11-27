@@ -160,6 +160,7 @@ export async function duplicateSurvey(surveyId: string): Promise<string> {
     include: {
       questions: { orderBy: { createdAt: "asc" } },
       edges: true,
+      questionGroups: true,
     },
   });
   if (!survey) throw new Error("Encuesta no encontrada");
@@ -172,6 +173,7 @@ export async function duplicateSurvey(surveyId: string): Promise<string> {
     updatedAt: _updatedAt,
     questions,
     edges,
+    questionGroups,
     ...design
   } = survey;
 
@@ -192,11 +194,20 @@ export async function duplicateSurvey(surveyId: string): Promise<string> {
     },
   });
 
+  const groupIdMap = new Map<string, string>();
+  for (const group of questionGroups) {
+    const createdGroup = await prisma.questionGroup.create({
+      data: { surveyId: copy.id, name: group.name, color: group.color },
+    });
+    groupIdMap.set(group.id, createdGroup.id);
+  }
+
   const idMap = new Map<string, string>();
   for (const question of questions) {
     const created = await prisma.question.create({
       data: {
         surveyId: copy.id,
+        groupId: question.groupId ? (groupIdMap.get(question.groupId) ?? null) : null,
         type: question.type,
         title: question.title,
         options: question.options ?? undefined,

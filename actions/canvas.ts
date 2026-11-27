@@ -235,5 +235,8 @@ export async function applyCanvasChanges(
   revalidatePath(`/surveys/${surveyId}/results`);
   revalidatePath("/dashboard");
 
+  // Deleting cards can leave a group empty; an empty group has no box to show.
+  await prisma.questionGroup.deleteMany({ where: { surveyId, questions: { none: {} } } });
+
   return { questionIdMap };
 }

@@ -86,6 +86,7 @@ model Survey {
   responses     Response[]
   notifications Notification[]
   collectors    Collector[]
+  questionGroups QuestionGroup[]
   comments      SurveyComment[]
 }
 
@@ -114,6 +115,9 @@ model Question {
   id                    String       @id @default(cuid())
   surveyId              String
   survey                Survey       @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  // Canvas group ("Datos personales", …) the card belongs to, if any.
+  groupId               String?
+  group                 QuestionGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
   type                  QuestionType
   title                 String
   options               Json? // array of { value, label, isCorrect?, points? } for choice types
@@ -293,4 +297,17 @@ model SurveyComment {
   updatedAt  DateTime  @updatedAt
 
   @@index([surveyId, questionId])
+}
+
+/// A named box on the canvas that holds several question cards and moves them together.
+model QuestionGroup {
+  id        String     @id @default(cuid())
+  surveyId  String
+  survey    Survey     @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  name      String
+  color     String     @default("slate") // slate | blue | green | amber | rose | violet
+  createdAt DateTime   @default(now())
+  questions Question[]
+
+  @@index([surveyId])
 }

@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { parseOptions } from "@/lib/question-options";
+import { parseGroupColor } from "@/lib/question-groups";
 import {
   parseBackgroundImageScope,
   parseThankYouImageMode,
@@ -30,6 +31,7 @@ export default async function SurveyQuestionsPage({
     include: {
       questions: true,
       edges: true,
+      questionGroups: { orderBy: { createdAt: "asc" } },
       comments: {
         orderBy: { createdAt: "asc" },
         include: { author: { select: { name: true, email: true } } },
@@ -99,6 +101,10 @@ export default async function SurveyQuestionsPage({
             thankYouImageUrl: survey.thankYouImageUrl,
             thankYouImageMode: parseThankYouImageMode(survey.thankYouImageMode),
           }}
+          initialGroups={survey.questionGroups.map((g) => ({ id: g.id, name: g.name, color: parseGroupColor(g.color) }))}
+          initialMembership={Object.fromEntries(
+            survey.questions.flatMap((q) => (q.groupId ? [[q.id, q.groupId]] : [])),
+          )}
           options={surveyOptionsOf(survey)}
           initialComments={survey.comments.map((c) => ({
             id: c.id,
