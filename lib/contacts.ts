@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { languageCodeOf } from "@/lib/languages";
 
 export const MAX_IMPORT_ROWS = 1000;
 
@@ -6,13 +7,16 @@ export const contactInputSchema = z.object({
   email: z.string().trim().toLowerCase().email("Email inválido"),
   firstName: z.string().trim().max(80).optional(),
   lastName: z.string().trim().max(80).optional(),
-  language: z.string().trim().max(20).optional(),
+  language: z
+    .string()
+    .optional()
+    .transform((value) => languageCodeOf(value)),
   custom1: z.string().trim().max(120).optional(),
   custom2: z.string().trim().max(120).optional(),
   custom3: z.string().trim().max(120).optional(),
 });
 
-export type ContactInput = z.infer<typeof contactInputSchema>;
+export type ContactInput = z.input<typeof contactInputSchema>;
 
 export type ContactRow = {
   id: string;

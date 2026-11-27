@@ -34,6 +34,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { ActionResult } from "@/lib/action-result";
 import type { ContactInput, ContactRow } from "@/lib/contacts";
+import { CONTACT_LANGUAGES, languageLabel } from "@/lib/languages";
 import { cn } from "@/lib/utils";
 
 type Group = { id: string; name: string };
@@ -212,7 +213,7 @@ export function ContactsManager({ contacts, groups }: { contacts: ContactRow[]; 
                       <td className="px-3 py-2">{c.email}</td>
                       <td className="px-3 py-2">{c.firstName}</td>
                       <td className="px-3 py-2">{c.lastName}</td>
-                      <td className="px-3 py-2">{c.language}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{languageLabel(c.language)}</td>
                       <td className="px-3 py-2">{c.custom1}</td>
                       <td className="px-3 py-2">{c.custom2}</td>
                       <td className="px-3 py-2">{c.custom3}</td>
@@ -359,7 +360,22 @@ function ContactDialog({
           {FIELDS.map((f) => (
             <div key={f.key} className="flex flex-col gap-1.5">
               <Label>{f.label}</Label>
-              <Input type={f.type} required={f.key === "email"} value={values[f.key]} onChange={(e) => setValues({ ...values, [f.key]: e.target.value })} />
+              {f.key === "language" ? (
+                <select
+                  value={values.language}
+                  onChange={(e) => setValues({ ...values, language: e.target.value })}
+                  className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+                >
+                  <option value="">Elige un idioma</option>
+                  {CONTACT_LANGUAGES.map((l) => (
+                    <option key={l.code} value={l.code}>
+                      {l.name} - {l.code}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <Input type={f.type} required={f.key === "email"} value={values[f.key]} onChange={(e) => setValues({ ...values, [f.key]: e.target.value })} />
+              )}
             </div>
           ))}
         </form>
