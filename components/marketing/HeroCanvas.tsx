@@ -1,15 +1,38 @@
 /**
  * A miniature of the real editor: questions are nodes, every answer has its own port and its own
- * edge. The dot travelling along the highlighted route is what one respondent sees.
+ * edge. «Sí» walks a two-question branch; «No» skips it and goes straight to the ending. The dots
+ * travelling each route show what one respondent sees.
  * Colours match the product: blue = next question, green = branch by answer, red = ending.
  */
 const BLUE = "#3b6cf6";
 const GREEN = "#2e9e6b";
 const RED = "#d6463b";
+const AMBER = "#f5a524";
 
-type NodeProps = { x: number; y: number; w: number; h: number; title: string };
+/** Points of a five-pointed star centred on (cx, cy). */
+function starPoints(cx: number, cy: number, r: number): string {
+  return Array.from({ length: 10 }, (_, i) => {
+    const angle = (Math.PI / 5) * i - Math.PI / 2;
+    const radius = i % 2 === 0 ? r : r * 0.45;
+    return `${(cx + radius * Math.cos(angle)).toFixed(1)},${(cy + radius * Math.sin(angle)).toFixed(1)}`;
+  }).join(" ");
+}
 
-function Node({ x, y, w, h, title, children }: NodeProps & { children?: React.ReactNode }) {
+function Node({
+  x,
+  y,
+  w,
+  h,
+  title,
+  children,
+}: {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  title: string;
+  children?: React.ReactNode;
+}) {
   return (
     <g>
       <rect x={x} y={y} width={w} height={h} rx={12} className="fill-card stroke-border" strokeWidth={1.5} />
@@ -21,83 +44,126 @@ function Node({ x, y, w, h, title, children }: NodeProps & { children?: React.Re
   );
 }
 
-function TextBox({ x, y, w }: { x: number; y: number; w: number }) {
-  return (
-    <>
-      <rect x={x} y={y} width={w} height={36} rx={8} className="fill-muted stroke-border" />
-      <text x={x + 12} y={y + 23} className="fill-muted-foreground" fontSize={12}>
-        Respuesta abierta…
-      </text>
-    </>
-  );
+function Port({ x, y, color }: { x: number; y: number; color: string }) {
+  return <circle cx={x} cy={y} r={5.5} className="fill-background" stroke={color} strokeWidth={2} />;
 }
 
+const YES_ROUTE =
+  "M280 263 C330 263 330 70 380 70 L510 70 L510 208 L640 208 C700 208 700 330 740 330";
+const NO_ROUTE = "M280 291 C330 291 330 440 430 440 L640 440 C700 440 700 330 740 330";
+
 export function HeroCanvas() {
-  const route = "M280 304 C330 304 330 430 380 430 L640 430 C690 430 690 270 740 270";
   return (
     <div className="overflow-x-auto">
       <svg
         viewBox="0 0 960 520"
         role="img"
-        aria-label="Ejemplo de encuesta en el canvas: una pregunta sobre la experiencia se ramifica en tres preguntas distintas según la respuesta y todas terminan en una pantalla final."
+        aria-label="Ejemplo de encuesta en el canvas: una pregunta de sí o no. Quien responde sí sigue por dos preguntas más; quien responde no salta directo a la pantalla final."
         className="mx-auto block h-auto min-w-[760px] w-full max-w-[1100px]"
       >
         {/* Edges first, so nodes sit on top. */}
         <g fill="none" strokeWidth={2.5} strokeLinecap="round">
-          <path d="M280 248 C330 248 330 90 380 90" stroke={GREEN} />
-          <path d="M280 276 C330 276 330 260 380 260" stroke={GREEN} />
-          <path d="M280 304 C330 304 330 430 380 430" stroke={GREEN} />
-          <path d="M640 90 C690 90 690 270 740 270" stroke={BLUE} />
-          <path d="M640 260 C690 260 690 270 740 270" stroke={BLUE} />
-          <path d="M640 430 C690 430 690 270 740 270" stroke={BLUE} />
+          <path d="M280 263 C330 263 330 70 380 70" stroke={GREEN} />
+          <path d="M510 120 L510 150" stroke={BLUE} />
+          <path d="M640 208 C700 208 700 330 740 330" stroke={BLUE} />
+          <path d="M280 291 C330 291 330 440 430 440 L640 440 C700 440 700 330 740 330" stroke={RED} />
         </g>
+        <text x={455} y={464} fontSize={12} className="fill-muted-foreground">
+          Salta las preguntas
+        </text>
 
-        <Node x={30} y={190} w={250} h={140} title="¿Cómo fue tu experiencia?">
+        {/* Respondents travelling each route; hidden behind nodes while inside them. */}
+        <circle r={7} fill={GREEN} visibility="hidden" className="motion-reduce:hidden">
+          {/* Start hidden: before the motion kicks in an SVG shape sits at the origin. */}
+          <set attributeName="visibility" to="visible" begin="0s" />
+          {/* Cross the nodes quickly (the dot is hidden behind them) and travel the arrows at an even pace:
+              edge, node, gap, node, edge. Fractions of the route length → fractions of the time. */}
+          <animateMotion
+            dur="4s"
+            repeatCount="indefinite"
+            path={YES_ROUTE}
+            calcMode="linear"
+            keyPoints="0;0.2877;0.5145;0.5523;0.7892;1"
+            keyTimes="0;0.4411;0.528;0.5859;0.6768;1"
+          />
+        </circle>
+        <circle r={7} fill={RED} visibility="hidden" className="motion-reduce:hidden">
+          <set attributeName="visibility" to="visible" begin="2s" />
+          <animateMotion dur="4s" begin="2s" repeatCount="indefinite" path={NO_ROUTE} calcMode="linear" />
+        </circle>
+
+        <Node x={30} y={205} w={250} h={116} title="¿Usaste el servicio?">
           {[
-            ["Buena", 252],
-            ["Regular", 280],
-            ["Mala", 308],
-          ].map(([label, y]) => (
-            <g key={label}>
+            ["Sí", 267, GREEN],
+            ["No", 295, RED],
+          ].map(([label, y, color]) => (
+            <g key={String(label)}>
               <line x1={30} x2={280} y1={Number(y) - 17} y2={Number(y) - 17} className="stroke-border" />
               <text x={48} y={y as number} className="fill-foreground" fontSize={13}>
                 {label}
               </text>
-              <circle cx={280} cy={Number(y) - 4} r={5.5} className="fill-background" stroke={GREEN} strokeWidth={2} />
+              <Port x={280} y={Number(y) - 4} color={color as string} />
             </g>
           ))}
         </Node>
 
-        <Node x={380} y={40} w={260} h={100} title="¿Qué fue lo mejor?">
-          <TextBox x={398} y={82} w={224} />
+        <Node x={380} y={20} w={260} h={100} title="¿Cómo fue la atención?">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <polygon
+              key={i}
+              points={starPoints(406 + i * 34, 82, 13)}
+              fill={i < 4 ? AMBER : "none"}
+              stroke={AMBER}
+              strokeWidth={1.5}
+              strokeLinejoin="round"
+            />
+          ))}
         </Node>
-        <Node x={380} y={210} w={260} h={100} title="¿Qué podríamos mejorar?">
-          <TextBox x={398} y={252} w={224} />
-        </Node>
-        <Node x={380} y={380} w={260} h={100} title="¿Qué pasó? Contanos.">
-          <TextBox x={398} y={422} w={224} />
-        </Node>
+        <Port x={380} y={70} color={GREEN} />
+        <Port x={510} y={120} color={BLUE} />
 
-        {/* Ports */}
-        {[90, 260, 430].map((y) => (
-          <g key={y}>
-            <circle cx={380} cy={y} r={5.5} className="fill-background" stroke={GREEN} strokeWidth={2} />
-            <circle cx={640} cy={y} r={5.5} className="fill-background" stroke={BLUE} strokeWidth={2} />
-          </g>
-        ))}
+        <Node x={380} y={150} w={260} h={116} title="¿Qué pasó?">
+          {[
+            ["Demoras", 204, true],
+            ["Trato", 224, false],
+            ["Precio", 244, false],
+          ].map(([label, y, checked]) => (
+            <g key={String(label)}>
+              <rect
+                x={398}
+                y={Number(y) - 11}
+                width={14}
+                height={14}
+                rx={3}
+                className={checked ? "fill-foreground" : "fill-background stroke-border"}
+                strokeWidth={1.5}
+              />
+              {checked ? (
+                <path
+                  d={`M401 ${Number(y) - 4} l3 3 l6 -7`}
+                  fill="none"
+                  className="stroke-background"
+                  strokeWidth={1.8}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              ) : null}
+              <text x={422} y={y as number} className="fill-foreground" fontSize={13}>
+                {label}
+              </text>
+            </g>
+          ))}
+        </Node>
+        <Port x={510} y={150} color={BLUE} />
+        <Port x={640} y={208} color={BLUE} />
 
         <g>
-          <rect x={740} y={240} width={190} height={60} rx={30} className="fill-card" stroke={RED} strokeWidth={2} />
-          <text x={835} y={275} textAnchor="middle" className="fill-foreground" fontSize={15} fontWeight={600}>
+          <rect x={740} y={300} width={190} height={60} rx={30} className="fill-card" stroke={RED} strokeWidth={2} />
+          <text x={835} y={335} textAnchor="middle" className="fill-foreground" fontSize={15} fontWeight={600}>
             Fin · ¡Gracias!
           </text>
-          <circle cx={740} cy={270} r={5.5} className="fill-background" stroke={BLUE} strokeWidth={2} />
+          <Port x={740} y={330} color={BLUE} />
         </g>
-
-        {/* The route one respondent takes: answered "Mala". */}
-        <circle r={7} fill={GREEN} className="motion-reduce:hidden">
-          <animateMotion dur="4.5s" repeatCount="indefinite" path={route} keyPoints="0;1" keyTimes="0;1" calcMode="linear" />
-        </circle>
 
         {/* Legend */}
         <g fontSize={12} className="fill-muted-foreground">
@@ -106,7 +172,7 @@ export function HeroCanvas() {
           <line x1={250} x2={276} y1={500} y2={500} stroke={BLUE} strokeWidth={2.5} strokeLinecap="round" />
           <text x={284} y={504}>Siguiente pregunta</text>
           <line x1={440} x2={466} y1={500} y2={500} stroke={RED} strokeWidth={2.5} strokeLinecap="round" />
-          <text x={474} y={504}>Final de la encuesta</text>
+          <text x={474} y={504}>Salto al final</text>
         </g>
       </svg>
     </div>
