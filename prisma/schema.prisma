@@ -17,6 +17,8 @@ model User {
 
   surveys       Survey[]
   notifications Notification[]
+  contacts      Contact[]
+  contactGroups ContactGroup[]
 }
 
 enum SurveyStatus {
@@ -226,4 +228,44 @@ model Collector {
   responses Response[]
 
   @@index([surveyId])
+}
+
+/// Address book entry (SurveyMonkey "Contactos").
+model Contact {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email     String
+  firstName String?
+  lastName  String?
+  language  String?
+  custom1   String?
+  custom2   String?
+  custom3   String?
+  createdAt DateTime @default(now())
+
+  groups ContactGroupMember[]
+
+  @@unique([userId, email])
+}
+
+model ContactGroup {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime @default(now())
+
+  members ContactGroupMember[]
+
+  @@unique([userId, name])
+}
+
+model ContactGroupMember {
+  contactId String
+  contact   Contact      @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  groupId   String
+  group     ContactGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([contactId, groupId])
 }
