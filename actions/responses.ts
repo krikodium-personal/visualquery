@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { MAX_VARIABLE_VALUE_LENGTH, parseCustomVariables } from "@/lib/custom-variables";
 import { answerMatchesOption, resolveAnswerAction, type AnswerValue } from "@/lib/flow-engine";
 import { fullQuotaValues } from "@/lib/quotas";
+import { notifyResponseCompleted } from "@/lib/notifications";
 import {
   countAnsweredMatrixRows,
   parseOptions,
@@ -153,15 +154,17 @@ export async function submitAnswer(
 export async function completeResponse(responseId: string) {
   const response = await prisma.response.findUnique({
     where: { id: responseId },
-    select: { id: true, survey: { select: { status: true } } },
+    select: { id: true, surveyId: true, completedAt: true, survey: { select: { status: true } } },
   });
   if (!response) return;
   if (response.survey.status !== "published") throw new Error("La encuesta ya no acepta respuestas");
+  if (response.completedAt) return; // already completed: don't count it twice
 
   await prisma.response.update({
     where: { id: responseId },
     data: { completedAt: new Date() },
   });
+  await notifyResponseCompleted(response.surveyId);
 }
 
 /**

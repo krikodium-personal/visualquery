@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState } from "react";
 import Link from "next/link";
 import { Eye, EyeOff } from "lucide-react";
 import { login } from "@/actions/auth";
@@ -19,6 +19,20 @@ import {
 export default function LoginPage() {
   const [state, formAction, pending] = useActionState(login, undefined);
   const [showPassword, setShowPassword] = useState(false);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+
+  // Dev-only shortcut: the whole expression is compiled out of production builds,
+  // so neither the button nor the values ever reach the deployed bundle.
+  const devLogin =
+    process.env.NODE_ENV === "development" &&
+    process.env.NEXT_PUBLIC_DEV_LOGIN_EMAIL &&
+    process.env.NEXT_PUBLIC_DEV_LOGIN_PASSWORD
+      ? {
+          email: process.env.NEXT_PUBLIC_DEV_LOGIN_EMAIL,
+          password: process.env.NEXT_PUBLIC_DEV_LOGIN_PASSWORD,
+        }
+      : null;
 
   return (
     <div className="relative flex flex-1 items-center justify-center p-6">
@@ -37,7 +51,7 @@ export default function LoginPage() {
           <form action={formAction} className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" name="email" type="email" required autoComplete="email" />
+              <Input id="email" name="email" type="email" required autoComplete="email" ref={emailRef} />
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="password">Contraseña</Label>
@@ -49,6 +63,7 @@ export default function LoginPage() {
                   required
                   autoComplete="current-password"
                   className="pr-10"
+                  ref={passwordRef}
                 />
                 <button
                   type="button"
@@ -78,6 +93,18 @@ export default function LoginPage() {
           </p>
         </CardContent>
       </Card>
+      {devLogin ? (
+        <button
+          type="button"
+          aria-label="Completar los campos con la cuenta de desarrollo"
+          title="Completar con la cuenta de desarrollo"
+          onClick={() => {
+            if (emailRef.current) emailRef.current.value = devLogin.email;
+            if (passwordRef.current) passwordRef.current.value = devLogin.password;
+          }}
+          className="fixed right-6 bottom-6 size-10 rounded-full bg-black shadow-md transition-transform hover:scale-105 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        />
+      ) : null}
     </div>
   );
 }

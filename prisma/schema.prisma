@@ -13,7 +13,8 @@ model User {
   name         String?
   createdAt    DateTime @default(now())
 
-  surveys Survey[]
+  surveys       Survey[]
+  notifications Notification[]
 }
 
 enum SurveyStatus {
@@ -71,9 +72,10 @@ model Survey {
   // URL parameters captured with each response: [{ name, label? }].
   customVariables Json @default("[]")
 
-  questions Question[]
-  edges     Edge[]
-  responses Response[]
+  questions     Question[]
+  edges         Edge[]
+  responses     Response[]
+  notifications Notification[]
 }
 
 enum QuestionType {
@@ -168,4 +170,23 @@ model Answer {
 
   @@unique([responseId, questionId])
   @@index([questionId])
+}
+
+// In-app notification center. new_responses rows are one per survey per day and keep a running
+// count; once-only types (limit_reached) use day = "once".
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  surveyId  String
+  survey    Survey    @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  type      String // new_responses | limit_reached
+  day       String
+  count     Int       @default(1)
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([userId, surveyId, type, day])
+  @@index([userId, updatedAt])
 }

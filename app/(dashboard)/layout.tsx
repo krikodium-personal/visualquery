@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth, signOut } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
+import { NotificationCenter } from "@/components/notifications/NotificationCenter";
 import { DashboardHeaderActions } from "@/components/theme/DashboardHeader";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -18,6 +19,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             Visualquery
           </Link>
           <DashboardHeaderActions>
+            <NotificationCenter />
             <form
               action={async () => {
                 "use server";
