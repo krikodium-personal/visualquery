@@ -261,7 +261,7 @@ export function SurveyRunner({
         if (!preview) await submitAnswer(responseId!, currentQuestion.id, value);
         setAnswersByQuestion((previous) => ({ ...previous, [currentQuestion.id]: value }));
         const action = resolveAnswerAction(currentQuestion.options, value);
-        const nextId = action ? null : resolveNextQuestionId(currentQuestion.id, value, edges);
+        const nextId = action ? null : resolveNextQuestionId(currentQuestion.id, value, edges, currentQuestion.options);
         setAnsweredCount((c) => c + 1);
         if (nextId) {
           setDraft(initialAnswer(questions.find((question) => question.id === nextId)));

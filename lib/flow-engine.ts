@@ -1,3 +1,6 @@
+import { ratingSplitFor } from "@/lib/rating-options";
+import type { QuestionOption } from "@/lib/question-options";
+
 export interface FlowEdge {
   sourceQuestionId: string;
   targetQuestionId: string;
@@ -21,8 +24,16 @@ export function resolveNextQuestionId(
   currentQuestionId: string,
   answer: AnswerValue | undefined,
   edges: FlowEdge[],
+  /** Question options: needed for rating questions split by score. */
+  options?: QuestionOption[],
 ): string | null {
   const outgoing = edges.filter((e) => e.sourceQuestionId === currentQuestionId);
+
+  if (answer !== undefined && options) {
+    const split = ratingSplitFor(options, answer);
+    const splitEdge = split ? outgoing.find((e) => e.sourceOptionValue === split) : undefined;
+    if (splitEdge) return splitEdge.targetQuestionId;
+  }
 
   if (answer !== undefined) {
     const branch = outgoing.find(

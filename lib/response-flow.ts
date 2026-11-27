@@ -1,3 +1,4 @@
+import { ratingSplitBranches, ratingSplitFor } from "@/lib/rating-options";
 import {
   resolveNextQuestionId,
   type AnswerValue,
@@ -76,6 +77,11 @@ function matchingBranchLabel(
   questionsById: Map<string, AnalysisQuestion>,
 ): string | undefined {
   if (answer === undefined) return undefined;
+  const question = questionsById.get(questionId);
+  const split = question ? ratingSplitFor(question.options, answer) : null;
+  if (split && edges.some((e) => e.sourceQuestionId === questionId && e.sourceOptionValue === split)) {
+    return ratingSplitBranches(question!.options).find((o) => o.value === split)?.label;
+  }
   const branch = edges.find(
     (edge) =>
       edge.sourceQuestionId === questionId &&
@@ -157,7 +163,7 @@ export function buildResponseFlowGraph(
       }
 
       const branchLabel = matchingBranchLabel(currentId, answer, edges, questionsById);
-      const nextId = resolveNextQuestionId(currentId, answer, edges);
+      const nextId = resolveNextQuestionId(currentId, answer, edges, questionsById.get(currentId)?.options);
 
       if (nextId === null) {
         if (response.completedAt) {

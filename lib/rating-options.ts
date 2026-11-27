@@ -23,7 +23,7 @@ export const RATING_SCALES = [2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
 export type RatingScale = (typeof RATING_SCALES)[number];
 export const DEFAULT_RATING_SCALE: RatingScale = 5;
 
-const META_KINDS = new Set(["rating_shape", "rating_color", "rating_labels"]);
+const META_KINDS = new Set(["rating_shape", "rating_color", "rating_labels", "rating_split"]);
 
 export function isRatingMeta(option: QuestionOption): boolean {
   return Boolean(option.kind && META_KINDS.has(option.kind));
@@ -106,6 +106,8 @@ export type RatingConfig = {
   hasOther: boolean;
   naOption: QuestionOption | undefined;
   otherOption: QuestionOption | undefined;
+  /** Score at or below which respondents take the «low» branch; null = no split. */
+  splitAt: number | null;
 };
 
 export function parseRatingConfig(options: QuestionOption[]): RatingConfig {
@@ -135,6 +137,7 @@ export function parseRatingConfig(options: QuestionOption[]): RatingConfig {
     hasOther: Boolean(otherOption),
     naOption,
     otherOption,
+    splitAt: ratingSplitThreshold(options),
   };
 }
 
@@ -147,6 +150,7 @@ export function buildRatingOptions(config: {
   hasOther: boolean;
   naOption?: QuestionOption;
   otherOption?: QuestionOption;
+  splitAt?: number | null;
 }): QuestionOption[] {
   // Don't trim labels here — live edits call this on every keystroke and
   // trimming would swallow spaces ("Muy " → "Muy"). cleanOptions trims on save.
@@ -165,6 +169,10 @@ export function buildRatingOptions(config: {
     ...levels,
   ];
 
+  if (config.splitAt != null) {
+    next.splice(3, 0, { value: "split", label: String(config.splitAt), kind: "rating_split" });
+  }
+
   if (config.hasNa) {
     next.push(config.naOption?.kind === "none" ? config.naOption : { value: "na", label: "N/A", kind: "none" });
   }
@@ -181,4 +189,46 @@ export function buildRatingOptions(config: {
   }
 
   return next;
+}
+
+/** Virtual branch outputs of a rating question split by score. */
+export const RATING_SPLIT_LOW = "split-low";
+export const RATING_SPLIT_HIGH = "split-high";
+
+export function isRatingSplitValue(value: string | null | undefined): boolean {
+  return value === RATING_SPLIT_LOW || value === RATING_SPLIT_HIGH;
+}
+
+/** Score threshold configured on the question, or null when it isn't split. */
+export function ratingSplitThreshold(options: QuestionOption[]): number | null {
+  const raw = options.find((o) => o.kind === "rating_split")?.label;
+  if (raw === undefined) return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
+/** The two branches (low = at or below the threshold, high = above it), or [] without a split. */
+export function ratingSplitBranches(options: QuestionOption[]): QuestionOption[] {
+  const threshold = ratingSplitThreshold(options);
+  if (threshold === null) return [];
+  const level = options.filter(isRatingLevel).find((o) => Number(o.value) === threshold);
+  const name = level?.label?.trim() || String(threshold);
+  return [
+    { value: RATING_SPLIT_LOW, label: `${name} o menos`, kind: "choice" },
+    { value: RATING_SPLIT_HIGH, label: `Más de ${name}`, kind: "choice" },
+  ];
+}
+
+/** Which branch a numeric rating falls in; null for N/A, text answers or no split. */
+export function ratingSplitFor(options: QuestionOption[], answer: unknown): string | null {
+  const threshold = ratingSplitThreshold(options);
+  if (threshold === null) return null;
+  const raw =
+    typeof answer === "object" && answer !== null && !Array.isArray(answer)
+      ? (answer as Record<string, unknown>).rating
+      : answer;
+  if (raw === "" || raw === null || raw === undefined || typeof raw === "boolean") return null;
+  const score = Number(raw);
+  if (!Number.isFinite(score)) return null;
+  return score <= threshold ? RATING_SPLIT_LOW : RATING_SPLIT_HIGH;
 }

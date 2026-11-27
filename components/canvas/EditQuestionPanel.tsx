@@ -46,6 +46,8 @@ import {
   resizeRatingLevels,
   starCountLabel,
   type RatingShape,
+  ratingSplitBranches,
+  isRatingSplitValue,
 } from "@/lib/rating-options";
 import { questionMaxPoints, pointsLabel } from "@/lib/scoring";
 import { cn } from "@/lib/utils";
@@ -356,7 +358,8 @@ export function EditQuestionPanel({
   const otherConfig = readOtherConfig(otherItem);
   const hasNone = options.some((option) => option.kind === "none");
   const canScore = SCORABLE_TYPES.includes(type);
-  const canLogic = BRANCHABLE_TYPES.includes(type);
+  const ratingSplit = type === "rating" ? ratingSplitBranches(options) : [];
+  const canLogic = BRANCHABLE_TYPES.includes(type) || ratingSplit.length > 0;
   const maxPoints = questionMaxPoints({
     type,
     options: regularOptions,
@@ -366,13 +369,13 @@ export function EditQuestionPanel({
   const logicRows = useMemo(() => {
     if (!canLogic) return [] as { key: string; label: string }[];
     return [
-      ...editableOptions.map((option) => ({
+      ...(type === "rating" ? ratingSplit : editableOptions).map((option) => ({
         key: option.value,
         label: option.label || option.value,
       })),
       { key: "__default__", label: "Siguiente (por defecto)" },
     ];
-  }, [canLogic, editableOptions]);
+  }, [canLogic, editableOptions, ratingSplit, type]);
 
   const chooseType = (nextType: QuestionType) => {
     if (nextType === type) return;
@@ -567,6 +570,7 @@ export function EditQuestionPanel({
         hasOther: config.hasOther,
         naOption: config.naOption,
         otherOption: config.otherOption,
+        splitAt: config.splitAt,
       });
     }
     if (!OPTION_BASED_TYPES.includes(type) && type !== "dropdown_matrix" && type !== "slider") {
@@ -612,6 +616,7 @@ export function EditQuestionPanel({
       hasNa: boolean;
       hasOther: boolean;
       levels: { value: string; label: string }[];
+      splitAt: number | null;
     }>,
   ) => {
     setOptions((previous) => {
@@ -638,6 +643,7 @@ export function EditQuestionPanel({
         hasOther: patch.hasOther ?? config.hasOther,
         naOption: config.naOption,
         otherOption: config.otherOption,
+        splitAt: patch.splitAt !== undefined ? patch.splitAt : config.splitAt,
       });
     });
   };
@@ -667,7 +673,11 @@ export function EditQuestionPanel({
       const nextScoring = scoringEnabled && SCORABLE_TYPES.includes(type);
       const cleanedLogic: Record<string, string | null> = {};
       for (const [key, target] of Object.entries(optionLogic)) {
-        if (key === "__default__" || cleanedOptions.some((o) => o.value === key)) {
+        if (
+          key === "__default__" ||
+          cleanedOptions.some((o) => o.value === key) ||
+          (isRatingSplitValue(key) && ratingSplit.length > 0)
+        ) {
           cleanedLogic[key] = target;
         }
       }
@@ -1425,7 +1435,7 @@ export function EditQuestionPanel({
                             }}
                           >
                             <option value="">Sin cambio / usar canvas</option>
-                            {!isDefault ? (
+                            {!isDefault && !isRatingSplitValue(row.key) ? (
                               <>
                                 <option value="__end__">Fin de la encuesta</option>
                                 <option value="__disqualify__">Descalificar al encuestado</option>
@@ -1545,6 +1555,7 @@ function RatingEditor({
       hasNa: boolean;
       hasOther: boolean;
       levels: { value: string; label: string }[];
+      splitAt: number | null;
     }>,
   ) => void;
 }) {
@@ -1682,6 +1693,49 @@ function RatingEditor({
           ))}
         </div>
       ) : null}
+
+      <div className="flex flex-col gap-2 rounded-lg border p-3">
+        <label className="flex items-center gap-2 text-sm font-medium">
+          <input
+            type="checkbox"
+            className="accent-foreground"
+            checked={config.splitAt !== null}
+            disabled={config.levels.length < 2}
+            onChange={(event) =>
+              onPatch({
+                splitAt: event.target.checked
+                  ? Number(config.levels[Math.max(0, Math.floor(config.levels.length / 2) - 1)]?.value) || 1
+                  : null,
+              })
+            }
+          />
+          Dividir en 2 ramas según la nota
+        </label>
+        {config.splitAt !== null ? (
+          <>
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-muted-foreground">Rama 1: hasta</span>
+              <select
+                aria-label="Nota de corte"
+                className="h-9 rounded-md border bg-background px-2 text-sm"
+                value={String(config.splitAt)}
+                onChange={(event) => onPatch({ splitAt: Number(event.target.value) })}
+              >
+                {config.levels.slice(0, -1).map((level, index) => (
+                  <option key={`${level.value}-${index}`} value={level.value}>
+                    {level.label || starCountLabel(index + 1)} ({level.value})
+                  </option>
+                ))}
+              </select>
+              <span className="text-muted-foreground">· Rama 2: más que eso</span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              En el canvas aparecen dos salidas; conectá cada una a la pregunta que quieras, o
+              definilo en la pestaña Lógica.
+            </p>
+          </>
+        ) : null}
+      </div>
 
       <div className="flex flex-col gap-2">
         <label className="flex items-center gap-2 text-sm">

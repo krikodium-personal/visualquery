@@ -22,6 +22,7 @@ const optionSchema = z.object({
       "rating_shape",
       "rating_color",
       "rating_labels",
+      "rating_split",
     ])
     .optional(),
   // Dropdown matrix: the column (menu) a "choice" option belongs to. Absent = shared by all.

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { QuestionOption } from "@/lib/question-options";
 import { optionPoints } from "@/lib/question-options";
-import { isRatingLevel } from "@/lib/rating-options";
+import { isRatingLevel, ratingSplitBranches } from "@/lib/rating-options";
 import { BRANCHABLE_TYPES, QUESTION_TYPE_LABELS, type QuestionType } from "@/lib/question-types";
 import { QuestionTypeIcon } from "@/components/questions/QuestionTypeIcon";
 
@@ -47,6 +47,11 @@ const isBranchable = (type: QuestionNodeData["type"]) => BRANCHABLE_TYPES.includ
 
 export function QuestionNode({ data, selected }: NodeProps<QuestionNode>) {
   const branchable = isBranchable(data.type);
+  const branchOptions = branchable
+    ? data.options
+    : data.type === "rating"
+      ? ratingSplitBranches(data.options)
+      : [];
   const ratingStarCount =
     data.type === "rating"
       ? Math.max(2, data.options.filter(isRatingLevel).length || 5)
@@ -124,9 +129,9 @@ export function QuestionNode({ data, selected }: NodeProps<QuestionNode>) {
         </div>
       </div>
 
-      {branchable && data.options.length > 0 && (
+      {branchOptions.length > 0 && (
         <div className="flex flex-col divide-y">
-          {data.options.map((option) => {
+          {branchOptions.map((option) => {
             const points = data.scoringEnabled ? optionPoints(option) : 0;
             return (
               <div key={option.value} className="relative flex items-center justify-between gap-2 px-3 py-2 text-xs">

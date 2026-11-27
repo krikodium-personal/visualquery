@@ -59,6 +59,12 @@ import {
 import { GROUP_COLORS, type CanvasGroup } from "@/lib/question-groups";
 import type { CommentItem } from "@/lib/comments";
 import { computeQuestionCodes } from "@/lib/question-codes";
+import { ratingSplitBranches } from "@/lib/rating-options";
+
+/** Options an edge can leave from: the answers plus the virtual score branches of a rating. */
+function branchOptionsOf(options: QuestionOption[]): QuestionOption[] {
+  return [...options, ...ratingSplitBranches(options)];
+}
 import { applyCanvasChanges } from "@/actions/canvas";
 
 const CANVAS_PREVIEW_OPEN_KEY = "vq-canvas-preview-open";
@@ -155,6 +161,7 @@ function applyOptionLogic(
   options: QuestionOption[],
 ): Edge[] {
   let next = [...edges];
+  const knownOptions = [...options, ...ratingSplitBranches(options)];
   // An option that ends the survey / disqualifies has no outgoing branch.
   for (const option of options) {
     if (!option.action) continue;
@@ -164,12 +171,12 @@ function applyOptionLogic(
   for (const [key, targetId] of Object.entries(optionLogic)) {
     if (!targetId) continue;
     const sourceOptionValue = key === "__default__" ? null : key;
-    if (sourceOptionValue && !options.some((option) => option.value === sourceOptionValue)) {
+    if (sourceOptionValue && !knownOptions.some((option) => option.value === sourceOptionValue)) {
       continue;
     }
     const sourceHandle = sourceOptionValue ? `option-${sourceOptionValue}` : "default";
     const optionLabel = sourceOptionValue
-      ? options.find((option) => option.value === sourceOptionValue)?.label
+      ? knownOptions.find((option) => option.value === sourceOptionValue)?.label
       : undefined;
     next = next.filter(
       (edge) => !(edge.source === sourceQuestionId && edge.sourceHandle === sourceHandle),
@@ -227,7 +234,7 @@ function buildInitialEdges(questions: SurveyQuestion[], surveyEdges: SurveyEdge[
   return surveyEdges.map((e) => {
     const sourceQuestion = questions.find((q) => q.id === e.sourceQuestionId);
     const optionLabel = e.sourceOptionValue
-      ? sourceQuestion?.options.find((o) => o.value === e.sourceOptionValue)?.label
+      ? branchOptionsOf(sourceQuestion?.options ?? []).find((o) => o.value === e.sourceOptionValue)?.label
       : undefined;
     return {
       id: e.id,
@@ -389,7 +396,7 @@ export function Canvas({
         const sourceOptionValue = optionValueFromHandle(edge.sourceHandle);
         const sourceNode = nodesRef.current.find((node) => node.id === edge.source);
         const optionLabel = sourceOptionValue
-          ? sourceNode?.data.options.find((option) => option.value === sourceOptionValue)?.label
+          ? branchOptionsOf(sourceNode?.data.options ?? []).find((option) => option.value === sourceOptionValue)?.label
           : undefined;
         return { ...edge, ...edgeAppearance(sourceOptionValue, optionLabel) };
       }),
@@ -645,7 +652,7 @@ export function Canvas({
       const sourceOptionValue = optionValueFromHandle(connection.sourceHandle);
       const sourceNode = nodesRef.current.find((n) => n.id === connection.source);
       const optionLabel = sourceOptionValue
-        ? sourceNode?.data.options.find((o) => o.value === sourceOptionValue)?.label
+        ? branchOptionsOf(sourceNode?.data.options ?? []).find((o) => o.value === sourceOptionValue)?.label
         : undefined;
 
       const filtered = edgesRef.current.filter(
@@ -676,7 +683,7 @@ export function Canvas({
       const sourceOptionValue = optionValueFromHandle(connection.sourceHandle);
       const sourceNode = nodesRef.current.find((node) => node.id === connection.source);
       const optionLabel = sourceOptionValue
-        ? sourceNode?.data.options.find((option) => option.value === sourceOptionValue)?.label
+        ? branchOptionsOf(sourceNode?.data.options ?? []).find((option) => option.value === sourceOptionValue)?.label
         : undefined;
       const normalizedConnection: Connection = {
         ...connection,
@@ -744,13 +751,13 @@ export function Canvas({
             if (e.source !== dialog.questionId) return true;
             const optValue = optionValueFromHandle(e.sourceHandle);
             if (optValue === null) return true;
-            return values.options.some((o) => o.value === optValue);
+            return branchOptionsOf(values.options).some((o) => o.value === optValue);
           })
           .map((edge) => {
             if (edge.source !== dialog.questionId) return edge;
             const sourceOptionValue = optionValueFromHandle(edge.sourceHandle);
             const optionLabel = sourceOptionValue
-              ? values.options.find((option) => option.value === sourceOptionValue)?.label
+              ? branchOptionsOf(values.options).find((option) => option.value === sourceOptionValue)?.label
               : undefined;
             return {
               ...edge,
