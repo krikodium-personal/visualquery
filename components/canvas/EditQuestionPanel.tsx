@@ -9,7 +9,7 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from "react";
-import { Check, Heart, Minus, Plus, Star, ThumbsUp, X } from "lucide-react";
+import { Check, Heart, Minus, Plus, Star, ThumbsUp, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -262,6 +262,7 @@ export function EditQuestionPanel({
   logicTargets = [],
   groupContext = null,
   onSubmit,
+  onDelete,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -271,6 +272,8 @@ export function EditQuestionPanel({
   /** Set when the new question comes out of a card inside this group. */
   groupContext?: { name: string } | null;
   onSubmit: (values: QuestionFormValues, group?: NewQuestionGroup) => Promise<void>;
+  /** Only when editing an existing question: asks for confirmation and deletes it. */
+  onDelete?: () => void;
 }) {
   const [tab, setTab] = useState<EditorTab>("edit");
   const [title, setTitle] = useState("");
@@ -1518,6 +1521,17 @@ export function EditQuestionPanel({
           ) : null}
 
           <DialogFooter>
+            {onDelete ? (
+              <Button
+                type="button"
+                variant="destructive"
+                className="sm:mr-auto"
+                disabled={saving}
+                onClick={onDelete}
+              >
+                <Trash2 className="size-4" /> Eliminar
+              </Button>
+            ) : null}
             <Button type="submit" disabled={saving}>
               {saving ? "Guardando..." : "Guardar"}
             </Button>

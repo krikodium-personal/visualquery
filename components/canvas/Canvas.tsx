@@ -22,6 +22,7 @@ import "@xyflow/react/dist/style.css";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -565,9 +566,12 @@ export function Canvas({
     }, 0);
   }, [autoAlign, nodes, applyLayout, commitGraph, persistGraph]);
 
-  const handleDeleteQuestion = useCallback(
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const handleDeleteQuestion = useCallback((questionId: string) => setDeleteTargetId(questionId), []);
+
+  const confirmDeleteQuestion = useCallback(
     (questionId: string) => {
-      if (!confirm("¿Eliminar esta pregunta? También se borran sus conexiones.")) return;
+      setDeleteTargetId(null);
       const newEdges = edgesRef.current.filter(
         (e) => e.source !== questionId && e.target !== questionId,
       );
@@ -577,6 +581,8 @@ export function Canvas({
     },
     [commitGraph, persistGraph],
   );
+
+  const deleteTarget = deleteTargetId ? nodes.find((n) => n.id === deleteTargetId) : undefined;
 
   const movedSinceSave = useCallback((id: string, position: { x: number; y: number }) => {
     const saved = savedPositionsRef.current.get(id);
@@ -1625,7 +1631,38 @@ export function Canvas({
           logicTargets={logicTargets}
           groupContext={newQuestionGroupContext}
           onSubmit={handleCreateSubmit}
+          onDelete={
+            dialog?.mode === "edit"
+              ? () => {
+                  const id = dialog.questionId;
+                  setDialog(null);
+                  handleDeleteQuestion(id);
+                }
+              : undefined
+          }
         />
+        <Dialog open={deleteTarget !== undefined} onOpenChange={(o) => !o && setDeleteTargetId(null)}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>¿Eliminar esta pregunta?</DialogTitle>
+              <DialogDescription>
+                {deleteTarget ? `«${deleteTarget.data.title}» ` : ""}se eliminará junto con sus
+                conexiones. Esta acción no se puede deshacer.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeleteTargetId(null)}>
+                Cancelar
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => deleteTargetId && confirmDeleteQuestion(deleteTargetId)}
+              >
+                Eliminar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {previewOpen && nodes.length > 0 ? (
