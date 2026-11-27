@@ -20,6 +20,7 @@ model User {
   contacts      Contact[]
   contactGroups ContactGroup[]
   comments      SurveyComment[]
+  aiGenerations AiGeneration[]
 }
 
 enum SurveyStatus {
@@ -310,4 +311,19 @@ model QuestionGroup {
   questions Question[]
 
   @@index([surveyId])
+}
+
+/// One request to generate a survey with AI: used to rate-limit per user and to track cost.
+model AiGeneration {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  surveyId     String? // the draft it produced (no FK: the survey may be deleted later)
+  status       String   @default("started") // started | succeeded | failed
+  model        String?
+  inputTokens  Int?
+  outputTokens Int?
+  createdAt    DateTime @default(now())
+
+  @@index([userId, createdAt])
 }

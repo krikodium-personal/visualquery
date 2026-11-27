@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent } from "@/components/ui/card";
+import { AiSurveyDialog } from "./ai-survey-dialog";
 import { NewSurveyForm } from "./new-survey-form";
 import { SurveyCard } from "./survey-card";
 
@@ -23,7 +24,10 @@ export default async function DashboardPage() {
           <h1 className="text-2xl font-semibold">Tus encuestas</h1>
           <p className="text-muted-foreground">Creá una nueva o seguí editando una existente.</p>
         </div>
-        <NewSurveyForm />
+        <div className="flex items-center gap-2">
+          <AiSurveyDialog />
+          <NewSurveyForm />
+        </div>
       </div>
 
       {surveys.length === 0 ? (
