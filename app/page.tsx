@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { HeroCanvas } from "@/components/marketing/HeroCanvas";
 import { MarketingNav } from "@/components/marketing/Nav";
 import {
-  CompareSection,
+  BenefitsSection,
   Faq,
   Features,
   FinalCta,
@@ -48,7 +48,7 @@ export default async function Home() {
           <HeroCanvas />
         </div>
 
-        <CompareSection />
+        <BenefitsSection />
         <HowItWorks />
         <Features />
         <QuestionTypes />

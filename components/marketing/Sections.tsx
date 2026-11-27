@@ -17,64 +17,144 @@ export function SectionTitle({ title, children, className }: { title: string; ch
   );
 }
 
-/* ---------- Lineal vs canvas ---------- */
+/* ---------- Beneficios de armar todo con nodos ---------- */
 
-export function CompareSection() {
+const G = "#2e9e6b";
+const B = "#3b6cf6";
+const R = "#d6463b";
+
+function MiniNode({ x, y, w = 70, h = 28, label, stroke }: { x: number; y: number; w?: number; h?: number; label: string; stroke?: string }) {
+  return (
+    <g>
+      <rect x={x} y={y} width={w} height={h} rx={8} className="fill-background" stroke={stroke ?? "currentColor"} strokeOpacity={stroke ? 1 : 0.25} strokeWidth={1.5} />
+      <text x={x + w / 2} y={y + h / 2 + 4} textAnchor="middle" fontSize={11} className="fill-foreground">
+        {label}
+      </text>
+    </g>
+  );
+}
+
+/** One map instead of rules hidden in menus: every path is a visible line. */
+function MapVisual() {
+  return (
+    <svg viewBox="0 0 320 130" role="img" aria-label="Tres caminos distintos salen de una misma pregunta y se ven como líneas." className="h-full w-full">
+      <g fill="none" strokeWidth={2.5} strokeLinecap="round">
+        <path d="M80 65 C115 65 115 25 150 25" stroke={G} />
+        <path d="M80 65 C115 65 115 65 150 65" stroke={G} />
+        <path d="M80 65 C115 65 115 105 150 105" stroke={G} />
+        <path d="M220 25 L250 25" stroke={B} />
+        <path d="M220 105 L250 105" stroke={R} />
+      </g>
+      <MiniNode x={10} y={51} label="Pregunta" />
+      <MiniNode x={150} y={11} label="Camino 1" />
+      <MiniNode x={150} y={51} label="Camino 2" />
+      <MiniNode x={150} y={91} label="Camino 3" />
+      <MiniNode x={250} y={11} w={60} label="Sigue" stroke={B} />
+      <MiniNode x={250} y={91} w={60} label="Fin" stroke={R} />
+    </svg>
+  );
+}
+
+/** One survey that splits by group, instead of one survey per group. */
+function GroupsVisual() {
+  const groups = ["Clientes", "Prospectos", "Ex clientes"];
+  return (
+    <svg viewBox="0 0 320 130" role="img" aria-label="Una sola encuesta se divide en tres grupos." className="h-full w-full">
+      <g fill="none" strokeWidth={2.5} strokeLinecap="round" stroke={G}>
+        {groups.map((_, i) => (
+          <path key={i} d={`M100 65 C135 65 135 ${25 + i * 40} 170 ${25 + i * 40}`} />
+        ))}
+      </g>
+      <MiniNode x={10} y={51} w={90} label="Una encuesta" />
+      {groups.map((label, i) => (
+        <MiniNode key={label} x={170} y={11 + i * 40} w={100} label={label} />
+      ))}
+    </svg>
+  );
+}
+
+/** Check the survey by walking each path, not by reading rules. */
+function TryVisual() {
+  const paths = [
+    ["Sí", "Atención", "Motivo", "Fin"],
+    ["No", "Fin"],
+  ];
+  return (
+    <div className="flex h-full flex-col justify-center gap-3 py-2">
+      {paths.map((path) => (
+        <div key={path[0]} className="flex flex-wrap items-center gap-1.5 text-xs">
+          {path.map((step, i) => (
+            <span key={step + i} className="flex items-center gap-1.5">
+              <span className={cn("rounded-full border px-2.5 py-1", i === 0 && (step === "Sí" ? "border-[#2e9e6b] text-[#2e9e6b]" : "border-[#d6463b] text-[#d6463b]"), i === path.length - 1 && "bg-muted")}>{step}</span>
+              {i < path.length - 1 ? <span className="text-muted-foreground">›</span> : null}
+            </span>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Everyone's answers land in one analysis, ready to filter by group. */
+function ResultsVisual() {
+  return (
+    <div className="flex h-full flex-col justify-center gap-3 text-xs">
+      {[
+        ["Clientes", 64],
+        ["Prospectos", 38],
+        ["Ex clientes", 21],
+      ].map(([label, n]) => (
+        <div key={String(label)} className="flex items-center gap-3">
+          <span className="w-20 shrink-0 text-muted-foreground">{label}</span>
+          <span className="h-2.5 rounded-full bg-[#2e9e6b]" style={{ width: `${n}%` }} />
+          <span className="tabular-nums">{n}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const BENEFITS = [
+  {
+    title: "Sin lógica complicada de entender",
+    text: "No hay reglas escondidas en menús ni condiciones que descifrar. Cada camino es una línea que podés seguir con el dedo, y cualquier persona del equipo entiende la encuesta en segundos.",
+    visual: <MapVisual />,
+  },
+  {
+    title: "Una sola encuesta para todos los grupos",
+    text: "Cada grupo recorre su propia rama dentro de la misma encuesta. No necesitás duplicarla por cliente, mercado o segmento, ni mantener cinco versiones al corregir una pregunta.",
+    visual: <GroupsVisual />,
+  },
+  {
+    title: "Verificás probando, no leyendo reglas",
+    text: "Probá cada camino en la vista previa mientras armás y confirmá que cada respuesta lleva a donde esperabas. Si algo no cierra, reconectás la flecha y listo.",
+    visual: <TryVisual />,
+  },
+  {
+    title: "Todos los resultados en un solo lugar",
+    text: "Las respuestas de todos los grupos llegan al mismo análisis. Compará grupos, filtrá y mirá el recorrido sin juntar planillas de encuestas distintas.",
+    visual: <ResultsVisual />,
+  },
+];
+
+export function BenefitsSection() {
   return (
     <section className="mx-auto w-full max-w-6xl px-6 py-24">
-      <SectionTitle title="Un formulario lineal hace que todos contesten todo">
-        Cuando cada persona necesita un camino distinto, la lógica termina escondida en menús y nadie
-        sabe qué ve quién. En un canvas, el recorrido se ve de un vistazo.
+      <SectionTitle title="Armar todo visualmente te ahorra trabajo">
+        Cuando cada persona necesita un camino distinto, el canvas evita las encuestas duplicadas y las
+        reglas que nadie se anima a tocar.
       </SectionTitle>
 
-      <div className="mt-12 grid gap-6 md:grid-cols-2">
-        <div className="rounded-2xl border bg-card p-6">
-          <p className="font-medium">Formulario lineal</p>
-          <p className="mt-1 text-sm text-muted-foreground">Ocho preguntas en fila. Las ven las ocho, aunque seis no les apliquen.</p>
-          <ol className="mt-6 flex flex-col gap-2">
-            {Array.from({ length: 8 }, (_, i) => (
-              <li key={i} className="flex items-center gap-3 rounded-lg border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-                <span className="w-5 text-right tabular-nums">{i + 1}</span>
-                <span className="h-2 flex-1 rounded-full bg-border" style={{ maxWidth: `${55 + ((i * 17) % 40)}%` }} />
-              </li>
-            ))}
-          </ol>
-        </div>
-
-        <div className="rounded-2xl border bg-card p-6">
-          <p className="font-medium">Canvas de Visualquery</p>
-          <p className="mt-1 text-sm text-muted-foreground">Cada persona sigue su rama. Quien no califica sale temprano.</p>
-          <svg viewBox="0 0 420 300" role="img" aria-label="Un nodo inicial que se ramifica: una rama sigue a más preguntas y otra termina de inmediato." className="mt-6 h-auto w-full">
-            <g fill="none" strokeWidth={2.5} strokeLinecap="round">
-              <path d="M110 70 C150 70 150 40 190 40" stroke="#2e9e6b" />
-              <path d="M110 70 C150 70 150 150 190 150" stroke="#2e9e6b" />
-              <path d="M110 70 C150 70 150 250 190 250" stroke="#2e9e6b" />
-              <path d="M280 40 L330 40 L330 150 L190 150" stroke="none" />
-              <path d="M280 40 C310 40 310 40 340 40" stroke="#3b6cf6" />
-              <path d="M280 150 C310 150 310 150 340 150" stroke="#3b6cf6" />
-              <path d="M280 250 C310 250 310 250 340 250" stroke="#d6463b" />
-            </g>
-            {[
-              [10, 40, 100, 60, "Inicio"],
-              [190, 20, 90, 40, "Pregunta A"],
-              [190, 130, 90, 40, "Pregunta B"],
-              [190, 230, 90, 40, "No califica"],
-            ].map(([x, y, w, h, label]) => (
-              <g key={String(label)}>
-                <rect x={x as number} y={y as number} width={w as number} height={h as number} rx={9} className="fill-background stroke-border" strokeWidth={1.5} />
-                <text x={(x as number) + (w as number) / 2} y={(y as number) + (h as number) / 2 + 4} textAnchor="middle" fontSize={12} className="fill-foreground">
-                  {label}
-                </text>
-              </g>
-            ))}
-            <rect x={340} y={24} width={70} height={32} rx={16} className="fill-background" stroke="#3b6cf6" strokeWidth={1.5} />
-            <text x={375} y={44} textAnchor="middle" fontSize={11} className="fill-foreground">Sigue</text>
-            <rect x={340} y={134} width={70} height={32} rx={16} className="fill-background" stroke="#3b6cf6" strokeWidth={1.5} />
-            <text x={375} y={154} textAnchor="middle" fontSize={11} className="fill-foreground">Sigue</text>
-            <rect x={340} y={234} width={70} height={32} rx={16} className="fill-background" stroke="#d6463b" strokeWidth={1.5} />
-            <text x={375} y={254} textAnchor="middle" fontSize={11} className="fill-foreground">Fin</text>
-          </svg>
-        </div>
+      <div className="mt-14 grid gap-x-12 gap-y-14 md:grid-cols-2">
+        {BENEFITS.map((benefit) => (
+          <div key={benefit.title} className="flex flex-col gap-5">
+            <div className="h-36 rounded-2xl border bg-card px-6 py-4">{benefit.visual}</div>
+            <div>
+              <h3 className="text-xl font-semibold tracking-tight">{benefit.title}</h3>
+              <p className="mt-2 text-muted-foreground">{benefit.text}</p>
+            </div>
+          </div>
+        ))}
       </div>
     </section>
   );
