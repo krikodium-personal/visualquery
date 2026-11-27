@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { findRootQuestion } from "@/lib/flow-engine";
 import { prisma } from "@/lib/prisma";
@@ -18,6 +19,38 @@ import {
 } from "@/lib/survey-design";
 import { SurveyRunner } from "@/components/survey-runtime/SurveyRunner";
 import { SurveyPasswordGate } from "@/components/surveys/SurveyPasswordGate";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const survey = await prisma.survey.findFirst({
+    where: { slug, status: { in: ["published", "closed"] } },
+    select: {
+      title: true,
+      description: true,
+      shareTitle: true,
+      shareDescription: true,
+      shareImageUrl: true,
+    },
+  });
+  if (!survey) return {};
+
+  const title = survey.shareTitle || survey.title;
+  const description = survey.shareDescription || survey.description || undefined;
+  const images = survey.shareImageUrl ? [`/s/${slug}/share-image`] : undefined;
+  // Absolute og:image URLs need a base; AUTH_URL is already the site's public origin.
+  const origin = process.env.AUTH_URL || process.env.NEXTAUTH_URL;
+  return {
+    ...(origin ? { metadataBase: new URL(origin) } : {}),
+    title,
+    description,
+    openGraph: { title, description, type: "website", images },
+    twitter: { card: images ? "summary_large_image" : "summary", title, description, images },
+  };
+}
 
 export default async function PublicSurveyPage({
   params,
@@ -116,6 +149,9 @@ export default async function PublicSurveyPage({
         <SurveyRunner
           surveyId={survey.id}
           variables={variables}
+          endRedirectUrl={survey.endRedirectUrl}
+          disqualifyMessage={survey.disqualifyMessage}
+          disqualifyRedirectUrl={survey.disqualifyRedirectUrl}
           title={survey.title}
           description={survey.description}
           questions={questions}

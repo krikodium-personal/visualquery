@@ -23,6 +23,13 @@ export default async function SurveyPublishPage({
       responseLimit: true,
       cutoffAt: true,
       customVariables: true,
+      title: true,
+      shareTitle: true,
+      shareDescription: true,
+      shareImageUrl: true,
+      endRedirectUrl: true,
+      disqualifyMessage: true,
+      disqualifyRedirectUrl: true,
       _count: { select: { questions: true } },
     },
   });
@@ -45,6 +52,15 @@ export default async function SurveyPublishPage({
         responseLimit={survey.responseLimit}
         cutoffAt={survey.cutoffAt?.toISOString() ?? null}
         customVariables={parseCustomVariables(survey.customVariables)}
+        surveyTitle={survey.title}
+        sharing={{
+          shareTitle: survey.shareTitle,
+          shareDescription: survey.shareDescription,
+          shareImageUrl: survey.shareImageUrl,
+          endRedirectUrl: survey.endRedirectUrl,
+          disqualifyMessage: survey.disqualifyMessage,
+          disqualifyRedirectUrl: survey.disqualifyRedirectUrl,
+        }}
       />
     </div>
   );

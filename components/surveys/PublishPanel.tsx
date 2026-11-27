@@ -1,9 +1,17 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Copy, ExternalLink, Plus, Trash2 } from "lucide-react";
-import { togglePublish, updateCollectorOptions, updateCustomVariables } from "@/actions/surveys";
+import { Copy, Download, ExternalLink, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  togglePublish,
+  updateCollectorOptions,
+  updateCustomVariables,
+  updateSlug,
+} from "@/actions/surveys";
+import { useRouter } from "next/navigation";
+import QRCode from "qrcode";
+import { SharingSettings, type SharingValues } from "@/components/surveys/SharingSettings";
 import type { CustomVariable } from "@/lib/custom-variables";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +28,8 @@ export function PublishPanel({
   responseLimit,
   cutoffAt,
   customVariables,
+  surveyTitle,
+  sharing,
 }: {
   surveyId: string;
   slug: string;
@@ -30,6 +40,8 @@ export function PublishPanel({
   responseLimit: number | null;
   cutoffAt: string | null;
   customVariables: CustomVariable[];
+  surveyTitle: string;
+  sharing: SharingValues;
 }) {
   const [isPending, startTransition] = useTransition();
   const [password, setPassword] = useState(accessPassword ?? "");
@@ -43,12 +55,16 @@ export function PublishPanel({
   const saveVariables = () =>
     startTransition(async () => {
       try {
-        await updateCustomVariables(
+        const result = await updateCustomVariables(
           surveyId,
           variables
             .filter((variable) => variable.name.trim() !== "")
             .map((variable) => ({ name: variable.name.trim(), label: variable.label.trim() })),
         );
+        if (result.error) {
+          toast.error(result.error);
+          return;
+        }
         toast.success("Variables guardadas");
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "No se pudieron guardar las variables");
@@ -57,7 +73,50 @@ export function PublishPanel({
 
   const published = status === "published";
   const noQuestions = questionCount === 0;
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(publicUrl)}`;
+  const router = useRouter();
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [editingSlug, setEditingSlug] = useState(false);
+  const [slugDraft, setSlugDraft] = useState(slug);
+  const linkPrefix = publicUrl.slice(0, publicUrl.length - slug.length);
+
+  // The QR is drawn in the browser, so the survey link never goes to a third party.
+  useEffect(() => {
+    let cancelled = false;
+    QRCode.toDataURL(publicUrl, { width: 640, margin: 2 })
+      .then((url) => {
+        if (!cancelled) setQrDataUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) setQrDataUrl(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [publicUrl]);
+
+  const saveSlug = () =>
+    startTransition(async () => {
+      try {
+        const result = await updateSlug(surveyId, slugDraft);
+        if (result.error) {
+          toast.error(result.error);
+          return;
+        }
+        setEditingSlug(false);
+        toast.success("Link actualizado");
+        router.refresh();
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "No se pudo cambiar el link");
+      }
+    });
+
+  const shareLinks = [
+    { label: "Correo", href: `mailto:?subject=${encodeURIComponent(surveyTitle)}&body=${encodeURIComponent(publicUrl)}` },
+    { label: "WhatsApp", href: `https://wa.me/?text=${encodeURIComponent(`${surveyTitle} ${publicUrl}`)}` },
+    { label: "Facebook", href: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(publicUrl)}` },
+    { label: "LinkedIn", href: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(publicUrl)}` },
+    { label: "X", href: `https://twitter.com/intent/tweet?url=${encodeURIComponent(publicUrl)}&text=${encodeURIComponent(surveyTitle)}` },
+  ];
 
   const copyLink = async () => {
     await navigator.clipboard.writeText(publicUrl);
@@ -128,34 +187,107 @@ export function PublishPanel({
               <CardTitle className="text-base">Link para compartir</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              <div className="flex gap-2">
-                <Input readOnly value={publicUrl} className="font-mono text-xs" />
-                <Button variant="outline" size="icon" onClick={copyLink} aria-label="Copiar link">
-                  <Copy className="size-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  nativeButton={false}
-                  aria-label="Abrir encuesta"
-                  render={<a href={`/s/${slug}`} target="_blank" rel="noreferrer" />}
-                >
-                  <ExternalLink className="size-4" />
-                </Button>
+              {editingSlug ? (
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="shrink-0 font-mono text-xs text-muted-foreground">{linkPrefix}</span>
+                    <Input
+                      value={slugDraft}
+                      maxLength={100}
+                      className="font-mono text-xs"
+                      aria-label="Final del link"
+                      onChange={(event) => setSlugDraft(event.target.value.toLowerCase().replace(/\s/g, "-"))}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Letras sin tildes, números y guiones; de 3 a 100 caracteres. Al cambiarlo, el
+                    link anterior deja de funcionar.
+                  </p>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={saveSlug} disabled={isPending}>
+                      Guardar
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setEditingSlug(false);
+                        setSlugDraft(slug);
+                      }}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Input readOnly value={publicUrl} className="font-mono text-xs" />
+                  <Button variant="outline" size="icon" onClick={copyLink} aria-label="Copiar link">
+                    <Copy className="size-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setEditingSlug(true)}
+                    aria-label="Editar el final del link"
+                  >
+                    <Pencil className="size-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    nativeButton={false}
+                    aria-label="Abrir encuesta"
+                    render={<a href={`/s/${slug}`} target="_blank" rel="noreferrer" />}
+                  >
+                    <ExternalLink className="size-4" />
+                  </Button>
+                </div>
+              )}
+              <div className="flex flex-col gap-2">
+                <p className="text-sm font-medium">Compartir</p>
+                <div className="flex flex-wrap gap-2">
+                  {shareLinks.map((item) => (
+                    <Button
+                      key={item.label}
+                      variant="outline"
+                      size="sm"
+                      nativeButton={false}
+                      render={<a href={item.href} target="_blank" rel="noreferrer" />}
+                    >
+                      {item.label}
+                    </Button>
+                  ))}
+                </div>
               </div>
               <div className="flex flex-col items-start gap-2">
                 <p className="text-sm font-medium">Código QR</p>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={qrUrl}
-                  alt="Código QR de la encuesta"
-                  width={160}
-                  height={160}
-                  className="rounded-md border bg-white p-2"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Escanealo para abrir el link público en el celular.
-                </p>
+                {qrDataUrl ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={qrDataUrl}
+                    alt="Código QR de la encuesta"
+                    width={160}
+                    height={160}
+                    className="rounded-md border bg-white p-2"
+                  />
+                ) : (
+                  <div className="size-[160px] rounded-md border bg-muted/30" />
+                )}
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!qrDataUrl}
+                    nativeButton={false}
+                    render={<a href={qrDataUrl ?? "#"} download={`qr-${slug}.png`} />}
+                  >
+                    <Download className="size-4" /> Descargar PNG
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Escanealo para abrir el link público en el celular.
+                  </p>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -309,6 +441,8 @@ export function PublishPanel({
           </Card>
         </>
       )}
+
+      <SharingSettings surveyId={surveyId} surveyTitle={surveyTitle} initial={sharing} />
     </div>
   );
 }

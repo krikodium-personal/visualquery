@@ -69,6 +69,17 @@ model Survey {
   // Saved Análisis views (filters + compare groups), JSON array.
   analysisViews Json @default("[]")
 
+  // Link preview (Open Graph) when the public link is shared.
+  shareTitle       String?
+  shareDescription String?
+  shareImageUrl    String?
+
+  // After answering: redirect to this URL instead of staying on the thank-you screen.
+  endRedirectUrl String?
+  // Disqualified respondents: custom message and/or redirect URL.
+  disqualifyMessage     String?
+  disqualifyRedirectUrl String?
+
   // URL parameters captured with each response: [{ name, label? }].
   customVariables Json @default("[]")
 

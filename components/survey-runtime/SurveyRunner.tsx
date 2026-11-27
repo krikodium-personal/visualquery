@@ -100,6 +100,9 @@ export type SurveyPreviewState = {
 export function SurveyRunner({
   surveyId,
   variables,
+  endRedirectUrl,
+  disqualifyMessage,
+  disqualifyRedirectUrl,
   title,
   description,
   questions,
@@ -115,6 +118,10 @@ export function SurveyRunner({
   surveyId?: string;
   /** Custom variables read from the public link (only the survey's defined ones). */
   variables?: Record<string, string>;
+  /** Public link only: where to send the respondent after finishing / being disqualified. */
+  endRedirectUrl?: string | null;
+  disqualifyMessage?: string | null;
+  disqualifyRedirectUrl?: string | null;
   title: string;
   description: string | null;
   questions: RuntimeQuestion[];
@@ -210,6 +217,20 @@ export function SurveyRunner({
     finished,
   ]);
 
+  // Redirect after the final screen (never in the editor's preview).
+  // A test with scoring shows its results review, so it never redirects away from it.
+  const hasScoring = questions.some((question) => question.scoringEnabled);
+  const redirectTarget = disqualified
+    ? disqualifyRedirectUrl
+    : hasScoring
+      ? null
+      : endRedirectUrl;
+  useEffect(() => {
+    if (preview || !finished || !redirectTarget) return;
+    const timer = setTimeout(() => window.location.assign(redirectTarget), 1500);
+    return () => clearTimeout(timer);
+  }, [preview, finished, redirectTarget]);
+
   const ready = preview || responseId !== null;
   const currentQuestion = questions.find((q) => q.id === currentQuestionId) ?? null;
 
@@ -304,8 +325,11 @@ export function SurveyRunner({
       <CenteredCard {...shell}>
         <h2 className="text-2xl font-semibold">Gracias por tu tiempo</h2>
         <p className="text-muted-foreground">
-          Con tus respuestas no podés continuar con esta encuesta.
+          {disqualifyMessage?.trim() || "Con tus respuestas no podés continuar con esta encuesta."}
         </p>
+        {redirectTarget && !preview ? (
+          <p className="text-xs text-muted-foreground">Te estamos redirigiendo…</p>
+        ) : null}
       </CenteredCard>
     );
   }
@@ -337,6 +361,9 @@ export function SurveyRunner({
         <p className="text-muted-foreground">
           {design.thankYouText || DESIGN_DEFAULTS.thankYouText}
         </p>
+        {redirectTarget && !preview ? (
+          <p className="text-xs text-muted-foreground">Te estamos redirigiendo…</p>
+        ) : null}
       </CenteredCard>
     );
   }

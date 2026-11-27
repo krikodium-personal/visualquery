@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+import { sharingOptionsSchema, slugSchema, type SharingOptionsInput } from "@/lib/share-options";
 import {
   customVariableSchema,
   parseCustomVariables,
@@ -23,6 +24,10 @@ function slugify(title: string): string {
   const suffix = Math.random().toString(36).slice(2, 7);
   return `${base || "encuesta"}-${suffix}`;
 }
+
+/** Server actions that can fail for user-fixable reasons return the message instead of throwing
+ * (in production Next hides the text of thrown errors from the client). */
+export type ActionResult = { error?: string };
 
 async function requireUserId(): Promise<string> {
   const session = await auth();
@@ -137,25 +142,77 @@ export async function updateCollectorOptions(
   revalidatePath(`/s/${survey.slug}`);
 }
 
-/** URL parameters captured with each response (SurveyMonkey "Variables personalizadas"). */
-export async function updateCustomVariables(surveyId: string, variables: CustomVariable[]) {
+/** Lets the owner pick the end of the public link (/s/<slug>). */
+export async function updateSlug(surveyId: string, slug: string): Promise<ActionResult> {
   const ownerId = await requireUserId();
-  const parsed = z
+  const result = slugSchema.safeParse(slug);
+  if (!result.success) return { error: result.error.issues[0].message };
+  const parsed = result.data;
+
+  const survey = await prisma.survey.findFirst({
+    where: { id: surveyId, ownerId },
+    select: { slug: true },
+  });
+  if (!survey) return { error: "Encuesta no encontrada" };
+  if (survey.slug === parsed) return {};
+
+  const taken = await prisma.survey.findUnique({ where: { slug: parsed }, select: { id: true } });
+  if (taken) return { error: "Ese final de link ya está en uso, probá con otro" };
+
+  await prisma.survey.update({ where: { id: surveyId, ownerId }, data: { slug: parsed } });
+
+  revalidatePath(`/surveys/${surveyId}/publish`);
+  revalidatePath(`/s/${survey.slug}`);
+  revalidatePath(`/s/${parsed}`);
+  return {};
+}
+
+/** Link preview, redirect after answering and disqualification screen. */
+export async function updateSharingOptions(
+  surveyId: string,
+  input: SharingOptionsInput,
+): Promise<ActionResult> {
+  const ownerId = await requireUserId();
+  const result = sharingOptionsSchema.safeParse(input);
+  if (!result.success) return { error: result.error.issues[0].message };
+
+  const survey = await prisma.survey.findFirst({
+    where: { id: surveyId, ownerId },
+    select: { slug: true },
+  });
+  if (!survey) return { error: "Encuesta no encontrada" };
+
+  await prisma.survey.update({ where: { id: surveyId, ownerId }, data: result.data });
+
+  revalidatePath(`/surveys/${surveyId}/publish`);
+  revalidatePath(`/s/${survey.slug}`);
+  return {};
+}
+
+/** URL parameters captured with each response (SurveyMonkey "Variables personalizadas"). */
+export async function updateCustomVariables(
+  surveyId: string,
+  variables: CustomVariable[],
+): Promise<ActionResult> {
+  const ownerId = await requireUserId();
+  const result = z
     .array(customVariableSchema)
     .max(MAX_CUSTOM_VARIABLES, `Hasta ${MAX_CUSTOM_VARIABLES} variables`)
-    .parse(variables);
+    .safeParse(variables);
+  if (!result.success) return { error: result.error.issues[0].message };
+  const parsed = result.data;
 
   const names = parsed.map((variable) => variable.name.toLowerCase());
-  if (new Set(names).size !== names.length) throw new Error("Hay nombres de variable repetidos");
+  if (new Set(names).size !== names.length) return { error: "Hay nombres de variable repetidos" };
   if (names.some((name) => RESERVED_VARIABLE_NAMES.includes(name))) {
-    throw new Error(`«${RESERVED_VARIABLE_NAMES.join(", ")}» ya lo usa el link público`);
+    return { error: `«${RESERVED_VARIABLE_NAMES.join(", ")}» ya lo usa el link público` };
   }
 
   const survey = await prisma.survey.findFirst({
     where: { id: surveyId, ownerId },
     select: { slug: true },
   });
-  if (!survey) throw new Error("Encuesta no encontrada");
+  if (!survey) return { error: "Encuesta no encontrada" };
 
   await prisma.survey.update({
     where: { id: surveyId, ownerId },
@@ -170,6 +227,7 @@ export async function updateCustomVariables(surveyId: string, variables: CustomV
   revalidatePath(`/surveys/${surveyId}/publish`);
   revalidatePath(`/surveys/${surveyId}/results`);
   revalidatePath(`/s/${survey.slug}`);
+  return {};
 }
 
 /** SurveyMonkey-style “Hacer una copia”: clone survey + questions + edges (no responses). */
