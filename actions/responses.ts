@@ -5,6 +5,7 @@ import { MAX_VARIABLE_VALUE_LENGTH, parseCustomVariables } from "@/lib/custom-va
 import { answerMatchesOption, resolveAnswerAction, type AnswerValue } from "@/lib/flow-engine";
 import { fullQuotaValues } from "@/lib/quotas";
 import { notifyResponseCompleted } from "@/lib/notifications";
+import { collectorClosedReason } from "@/lib/collectors";
 import {
   countAnsweredMatrixRows,
   parseOptions,
@@ -13,36 +14,33 @@ import {
   validateOtherText,
 } from "@/lib/question-options";
 
-async function assertSurveyAcceptingResponses(surveyId: string) {
-  const survey = await prisma.survey.findFirst({
-    where: { id: surveyId, status: "published" },
+async function assertCollectorAcceptingResponses(collectorId: string) {
+  const collector = await prisma.collector.findUnique({
+    where: { id: collectorId },
     select: {
       id: true,
-      responseLimit: true,
+      surveyId: true,
+      status: true,
       cutoffAt: true,
-      customVariables: true,
+      responseLimit: true,
+      survey: { select: { status: true, customVariables: true } },
       _count: { select: { responses: true } },
     },
   });
-  if (!survey) throw new Error("Encuesta no disponible");
+  if (!collector || collector.survey.status !== "published") throw new Error("Encuesta no disponible");
 
-  if (survey.cutoffAt && survey.cutoffAt.getTime() <= Date.now()) {
-    throw new Error("Esta encuesta ya alcanzó su fecha de cierre");
-  }
-  if (survey.responseLimit !== null && survey._count.responses >= survey.responseLimit) {
-    throw new Error("Esta encuesta alcanzó el límite de respuestas");
-  }
-
-  return survey;
+  const closedReason = collectorClosedReason(collector, collector._count.responses);
+  if (closedReason) throw new Error(closedReason);
+  return collector;
 }
 
 export async function startResponse(
-  surveyId: string,
+  collectorId: string,
   variables: Record<string, string> = {},
 ): Promise<string> {
-  const survey = await assertSurveyAcceptingResponses(surveyId);
+  const collector = await assertCollectorAcceptingResponses(collectorId);
   // Only the variables the survey defines are stored, whatever the client sends.
-  const definitions = parseCustomVariables(survey.customVariables);
+  const definitions = parseCustomVariables(collector.survey.customVariables);
   const allowed = new Set(definitions.map((definition) => definition.name));
   const clean: Record<string, string> = {};
   for (const [name, value] of Object.entries(variables)) {
@@ -51,7 +49,11 @@ export async function startResponse(
     }
   }
   const response = await prisma.response.create({
-    data: { surveyId, variables: Object.keys(clean).length > 0 ? clean : undefined },
+    data: {
+      surveyId: collector.surveyId,
+      collectorId: collector.id,
+      variables: Object.keys(clean).length > 0 ? clean : undefined,
+    },
   });
   return response.id;
 }
@@ -154,7 +156,13 @@ export async function submitAnswer(
 export async function completeResponse(responseId: string) {
   const response = await prisma.response.findUnique({
     where: { id: responseId },
-    select: { id: true, surveyId: true, completedAt: true, survey: { select: { status: true } } },
+    select: {
+      id: true,
+      surveyId: true,
+      collectorId: true,
+      completedAt: true,
+      survey: { select: { status: true } },
+    },
   });
   if (!response) return;
   if (response.survey.status !== "published") throw new Error("La encuesta ya no acepta respuestas");
@@ -164,7 +172,7 @@ export async function completeResponse(responseId: string) {
     where: { id: responseId },
     data: { completedAt: new Date() },
   });
-  await notifyResponseCompleted(response.surveyId);
+  await notifyResponseCompleted(response.surveyId, response.collectorId);
 }
 
 /**

@@ -17,19 +17,24 @@ export default async function SurveyPublishPage({
     where: { id, ownerId: session!.user.id },
     select: {
       id: true,
-      slug: true,
       status: true,
-      accessPassword: true,
-      responseLimit: true,
-      cutoffAt: true,
       customVariables: true,
       title: true,
       shareTitle: true,
       shareDescription: true,
       shareImageUrl: true,
-      endRedirectUrl: true,
-      disqualifyMessage: true,
-      disqualifyRedirectUrl: true,
+      collectors: {
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          status: true,
+          responseLimit: true,
+          createdAt: true,
+          _count: { select: { responses: true } },
+        },
+      },
       _count: { select: { questions: true } },
     },
   });
@@ -44,22 +49,24 @@ export default async function SurveyPublishPage({
     <div className="mx-auto w-full max-w-2xl px-6 py-8">
       <PublishPanel
         surveyId={survey.id}
-        slug={survey.slug}
         status={survey.status}
         questionCount={survey._count.questions}
-        publicUrl={`${proto}://${host}/s/${survey.slug}`}
-        accessPassword={survey.accessPassword}
-        responseLimit={survey.responseLimit}
-        cutoffAt={survey.cutoffAt?.toISOString() ?? null}
+        origin={`${proto}://${host}`}
+        collectors={survey.collectors.map((collector) => ({
+          id: collector.id,
+          name: collector.name,
+          slug: collector.slug,
+          open: collector.status === "open",
+          responseCount: collector._count.responses,
+          responseLimit: collector.responseLimit,
+          createdAt: collector.createdAt.toISOString(),
+        }))}
         customVariables={parseCustomVariables(survey.customVariables)}
         surveyTitle={survey.title}
         sharing={{
           shareTitle: survey.shareTitle,
           shareDescription: survey.shareDescription,
           shareImageUrl: survey.shareImageUrl,
-          endRedirectUrl: survey.endRedirectUrl,
-          disqualifyMessage: survey.disqualifyMessage,
-          disqualifyRedirectUrl: survey.disqualifyRedirectUrl,
         }}
       />
     </div>

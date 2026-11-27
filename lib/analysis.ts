@@ -27,6 +27,8 @@ export type AnalysisResponse = {
   id: string;
   startedAt: string;
   completedAt: string | null;
+  /** Collector (link) the respondent came through; null if it was deleted. */
+  collectorId: string | null;
   /** Values of the survey's custom variables captured from the link. */
   variables: Record<string, string>;
   answers: { questionId: string; value: AnalysisAnswerValue }[];
@@ -38,6 +40,7 @@ export type AnalysisPayload = {
   edges: AnalysisEdge[];
   responses: AnalysisResponse[];
   customVariables: { name: string; label: string }[];
+  collectors: { id: string; name: string }[];
 };
 
 export type CompletenessFilter = "all" | "completed" | "partial";

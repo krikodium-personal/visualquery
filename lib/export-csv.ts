@@ -24,12 +24,14 @@ export function buildResponsesCsv(
   questions: AnalysisQuestion[],
   responses: AnalysisResponse[],
   variableNames: string[] = [],
+  collectorNames: Map<string, string> = new Map(),
 ): string {
   const headers = [
     "response_id",
     "started_at",
     "completed_at",
     "status",
+    "recopilador",
     ...variableNames,
     ...questions.map((question) => `Q${question.index}: ${question.title}`),
   ];
@@ -43,6 +45,7 @@ export function buildResponsesCsv(
       response.startedAt,
       response.completedAt ?? "",
       response.completedAt ? "completada" : "parcial",
+      response.collectorId ? (collectorNames.get(response.collectorId) ?? "") : "(eliminado)",
       ...variableNames.map((name) => response.variables[name] ?? ""),
       ...questions.map((question) =>
         formatAnswer(byQuestion.get(question.id) ?? null, question),

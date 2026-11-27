@@ -16,10 +16,12 @@ export function IndividualResponses({
   questions,
   responses,
   customVariables = [],
+  collectorNames = new Map(),
 }: {
   questions: AnalysisQuestion[];
   responses: AnalysisResponse[];
   customVariables?: { name: string; label: string }[];
+  collectorNames?: Map<string, string>;
 }) {
   const ordered = useMemo(
     () =>
@@ -82,6 +84,9 @@ export function IndividualResponses({
           <Badge variant="secondary">
             {response.completedAt ? "Completada" : "Parcial"}
           </Badge>
+          {response.collectorId && collectorNames.get(response.collectorId) ? (
+            <Badge variant="outline">{collectorNames.get(response.collectorId)}</Badge>
+          ) : null}
           <span className="text-muted-foreground">
             Inicio: {formatDateTime(response.startedAt)}
           </span>

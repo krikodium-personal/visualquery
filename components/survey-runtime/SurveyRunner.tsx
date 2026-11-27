@@ -98,7 +98,7 @@ export type SurveyPreviewState = {
 };
 
 export function SurveyRunner({
-  surveyId,
+  collectorId,
   variables,
   endRedirectUrl,
   disqualifyMessage,
@@ -116,6 +116,8 @@ export function SurveyRunner({
   onPreviewStateChange,
 }: {
   surveyId?: string;
+  /** Public link: the collector the respondent came through (responses are counted per collector). */
+  collectorId?: string;
   /** Custom variables read from the public link (only the survey's defined ones). */
   variables?: Record<string, string>;
   /** Public link only: where to send the respondent after finishing / being disqualified. */
@@ -166,10 +168,10 @@ export function SurveyRunner({
   const [disqualified, setDisqualified] = useState(false);
 
   useEffect(() => {
-    if (preview || !surveyId) return;
-    startResponse(surveyId, variables).then(setResponseId).catch(() => toast.error("La encuesta no está disponible. Recargá la página para ver su estado."));
+    if (preview || !collectorId) return;
+    startResponse(collectorId, variables).then(setResponseId).catch(() => toast.error("La encuesta no está disponible. Recargá la página para ver su estado."));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [surveyId, preview]);
+  }, [collectorId, preview]);
 
   const lastFocusRequestRef = useRef<string | null>(
     preview && initialFocusId && initialFocusId === previewFocusQuestionId

@@ -50,13 +50,33 @@ const optionalText = (max: number) =>
     .max(max, `Admite hasta ${max} caracteres`)
     .transform((value) => (value === "" ? null : value));
 
+/** Survey-level link preview (shared by all collectors). */
 export const sharingOptionsSchema = z.object({
   shareTitle: optionalText(120),
   shareDescription: optionalText(300),
   shareImageUrl: shareImage,
+});
+
+export type SharingOptionsInput = z.input<typeof sharingOptionsSchema>;
+
+/** Per-collector access rules and end-of-survey behaviour. */
+export const collectorOptionsSchema = z.object({
+  accessPassword: z
+    .string()
+    .trim()
+    .max(200)
+    .transform((value) => (value === "" ? null : value)),
+  responseLimit: z.number().int().positive().max(1_000_000).nullable(),
+  cutoffAt: z.string().datetime().nullable(),
   endRedirectUrl: optionalHttpUrl,
   disqualifyMessage: optionalText(500),
   disqualifyRedirectUrl: optionalHttpUrl,
 });
 
-export type SharingOptionsInput = z.input<typeof sharingOptionsSchema>;
+export type CollectorOptionsInput = z.input<typeof collectorOptionsSchema>;
+
+export const collectorNameSchema = z
+  .string()
+  .trim()
+  .min(1, "Poné un nombre para el recopilador")
+  .max(80, "El nombre admite hasta 80 caracteres");

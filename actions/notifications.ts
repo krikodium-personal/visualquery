@@ -10,6 +10,7 @@ export type NotificationItem = {
   surveyTitle: string;
   type: "new_responses" | "limit_reached";
   count: number;
+  detail: string | null;
   updatedAt: string;
   read: boolean;
 };
@@ -37,6 +38,7 @@ export async function getNotifications(): Promise<{ items: NotificationItem[]; u
     surveyTitle: row.survey.title,
     type: (row.type === "limit_reached" ? "limit_reached" : "new_responses") as NotificationItem["type"],
     count: row.count,
+    detail: row.detail,
     updatedAt: row.updatedAt.toISOString(),
     read: row.readAt !== null,
   }));

@@ -21,6 +21,7 @@ export default async function SurveyResultsPage({
     include: {
       questions: { orderBy: { createdAt: "asc" } },
       edges: true,
+      collectors: { orderBy: { createdAt: "asc" }, select: { id: true, name: true } },
       responses: {
         include: { answers: true },
         orderBy: { startedAt: "asc" },
@@ -45,6 +46,7 @@ export default async function SurveyResultsPage({
       targetQuestionId: edge.targetQuestionId,
       sourceOptionValue: edge.sourceOptionValue,
     })),
+    collectors: survey.collectors,
     customVariables: parseCustomVariables(survey.customVariables).map((variable) => ({
       name: variable.name,
       label: variable.label ?? "",
@@ -56,6 +58,7 @@ export default async function SurveyResultsPage({
       id: response.id,
       startedAt: response.startedAt.toISOString(),
       completedAt: response.completedAt?.toISOString() ?? null,
+      collectorId: response.collectorId,
       variables: parseResponseVariables(response.variables),
       answers: response.answers.map((answer) => ({
         questionId: answer.questionId,

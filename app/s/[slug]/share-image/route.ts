@@ -7,11 +7,11 @@ import { DATA_IMAGE_PATTERN } from "@/lib/share-options";
  */
 export async function GET(_request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const survey = await prisma.survey.findFirst({
-    where: { slug, status: { in: ["published", "closed"] } },
-    select: { shareImageUrl: true },
+  const collector = await prisma.collector.findUnique({
+    where: { slug },
+    select: { survey: { select: { status: true, shareImageUrl: true } } },
   });
-  const image = survey?.shareImageUrl;
+  const image = collector?.survey.status === "draft" ? null : collector?.survey.shareImageUrl;
   if (!image) return new Response("Not found", { status: 404 });
 
   if (/^https?:\/\//.test(image)) return Response.redirect(image, 302);

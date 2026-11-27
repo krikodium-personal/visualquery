@@ -14,12 +14,9 @@ export type SharingValues = {
   shareTitle: string | null;
   shareDescription: string | null;
   shareImageUrl: string | null;
-  endRedirectUrl: string | null;
-  disqualifyMessage: string | null;
-  disqualifyRedirectUrl: string | null;
 };
 
-/** Link preview, redirect after answering and disqualification screen. */
+/** Link preview shown when any collector link of the survey is shared. */
 export function SharingSettings({
   surveyId,
   surveyTitle,
@@ -33,11 +30,6 @@ export function SharingSettings({
   const [shareTitle, setShareTitle] = useState(initial.shareTitle ?? "");
   const [shareDescription, setShareDescription] = useState(initial.shareDescription ?? "");
   const [shareImageUrl, setShareImageUrl] = useState<string | null>(initial.shareImageUrl);
-  const [endRedirectUrl, setEndRedirectUrl] = useState(initial.endRedirectUrl ?? "");
-  const [disqualifyMessage, setDisqualifyMessage] = useState(initial.disqualifyMessage ?? "");
-  const [disqualifyRedirectUrl, setDisqualifyRedirectUrl] = useState(
-    initial.disqualifyRedirectUrl ?? "",
-  );
 
   const save = () =>
     startTransition(async () => {
@@ -46,9 +38,6 @@ export function SharingSettings({
           shareTitle,
           shareDescription,
           shareImageUrl: shareImageUrl ?? "",
-          endRedirectUrl,
-          disqualifyMessage,
-          disqualifyRedirectUrl,
         });
         if (result.error) {
           toast.error(result.error);
@@ -61,8 +50,7 @@ export function SharingSettings({
     });
 
   return (
-    <>
-      <Card>
+    <Card>
         <CardHeader>
           <CardTitle className="text-base">Vista previa del link</CardTitle>
         </CardHeader>
@@ -98,68 +86,12 @@ export function SharingSettings({
             onChange={setShareImageUrl}
             previewFit="cover"
           />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Después de responder</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <p className="text-sm text-muted-foreground">
-            Al terminar se muestra la pantalla final y, 1,5 segundos después, se lleva a la
-            persona a esta dirección. No se aplica a los tests con puntaje.
-          </p>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="endRedirectUrl">Redirigir a una URL</Label>
-            <Input
-              id="endRedirectUrl"
-              type="url"
-              value={endRedirectUrl}
-              placeholder="https://tu-sitio.com/gracias"
-              onChange={(event) => setEndRedirectUrl(event.target.value)}
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Descalificación personalizada</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <p className="text-sm text-muted-foreground">
-            Lo que ve quien llega a una opción marcada como «Descalificar al encuestado» en la
-            lógica de una pregunta.
-          </p>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="disqualifyMessage">Mensaje</Label>
-            <Textarea
-              id="disqualifyMessage"
-              value={disqualifyMessage}
-              maxLength={500}
-              rows={2}
-              placeholder="Con tus respuestas no podés continuar con esta encuesta."
-              onChange={(event) => setDisqualifyMessage(event.target.value)}
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="disqualifyRedirectUrl">Redirigir a una URL (opcional)</Label>
-            <Input
-              id="disqualifyRedirectUrl"
-              type="url"
-              value={disqualifyRedirectUrl}
-              placeholder="https://tu-sitio.com/no-calificas"
-              onChange={(event) => setDisqualifyRedirectUrl(event.target.value)}
-            />
-          </div>
           <div>
             <Button onClick={save} disabled={isPending}>
               {isPending ? "Guardando..." : "Guardar"}
             </Button>
           </div>
         </CardContent>
-      </Card>
-    </>
+    </Card>
   );
 }

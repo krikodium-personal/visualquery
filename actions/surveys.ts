@@ -5,7 +5,9 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
-import { sharingOptionsSchema, slugSchema, type SharingOptionsInput } from "@/lib/share-options";
+import { sharingOptionsSchema, type SharingOptionsInput } from "@/lib/share-options";
+import { slugify } from "@/lib/slug";
+import type { ActionResult } from "@/lib/action-result";
 import {
   customVariableSchema,
   parseCustomVariables,
@@ -14,25 +16,16 @@ import {
   type CustomVariable,
 } from "@/lib/custom-variables";
 
-function slugify(title: string): string {
-  const base = title
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-  const suffix = Math.random().toString(36).slice(2, 7);
-  return `${base || "encuesta"}-${suffix}`;
-}
-
-/** Server actions that can fail for user-fixable reasons return the message instead of throwing
- * (in production Next hides the text of thrown errors from the client). */
-export type ActionResult = { error?: string };
-
 async function requireUserId(): Promise<string> {
   const session = await auth();
   if (!session?.user) throw new Error("No autenticado");
   return session.user.id;
+}
+
+/** Public pages of every collector of a survey. */
+async function revalidateCollectorPages(surveyId: string) {
+  const collectors = await prisma.collector.findMany({ where: { surveyId }, select: { slug: true } });
+  for (const collector of collectors) revalidatePath(`/s/${collector.slug}`);
 }
 
 const createSurveySchema = z.object({
@@ -46,11 +39,13 @@ export async function createSurvey(_prevState: { error?: string } | undefined, f
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
   }
 
+  const slug = slugify(parsed.data.title);
   const survey = await prisma.survey.create({
     data: {
       ownerId,
       title: parsed.data.title,
-      slug: slugify(parsed.data.title),
+      slug,
+      collectors: { create: { name: "Enlace web 1", slug } },
     },
   });
 
@@ -77,7 +72,7 @@ export async function setSurveyStatus(surveyId: string, status: "draft" | "publi
   const next = z.enum(["draft", "published", "closed"]).parse(status);
   const survey = await prisma.survey.findFirst({
     where: { id: surveyId, ownerId },
-    select: { slug: true, _count: { select: { questions: true } } },
+    select: { _count: { select: { questions: true } } },
   });
   if (!survey) throw new Error("Encuesta no encontrada");
   if (next === "published" && survey._count.questions === 0) {
@@ -86,7 +81,7 @@ export async function setSurveyStatus(surveyId: string, status: "draft" | "publi
   await prisma.survey.update({ where: { id: surveyId, ownerId }, data: { status: next } });
   revalidatePath("/dashboard");
   revalidatePath(`/surveys/${surveyId}`, "layout");
-  revalidatePath(`/s/${survey.slug}`);
+  await revalidateCollectorPages(surveyId);
 }
 
 export async function renameSurvey(surveyId: string, title: string) {
@@ -100,74 +95,7 @@ export async function renameSurvey(surveyId: string, title: string) {
   revalidatePath(`/surveys/${surveyId}/questions`);
 }
 
-const collectorOptionsSchema = z.object({
-  accessPassword: z.string().max(200).nullable(),
-  responseLimit: z.number().int().positive().max(1_000_000).nullable(),
-  cutoffAt: z.string().datetime().nullable(),
-});
-
-/** SurveyMonkey-style web-link collector options. */
-export async function updateCollectorOptions(
-  surveyId: string,
-  input: {
-    accessPassword: string | null;
-    responseLimit: number | null;
-    cutoffAt: string | null;
-  },
-) {
-  const ownerId = await requireUserId();
-  const cutoffRaw = input.cutoffAt?.trim() || null;
-  const parsed = collectorOptionsSchema.parse({
-    accessPassword: input.accessPassword?.trim() ? input.accessPassword.trim() : null,
-    responseLimit: input.responseLimit,
-    cutoffAt: cutoffRaw,
-  });
-
-  const survey = await prisma.survey.findFirst({
-    where: { id: surveyId, ownerId },
-    select: { slug: true },
-  });
-  if (!survey) throw new Error("Encuesta no encontrada");
-
-  await prisma.survey.update({
-    where: { id: surveyId, ownerId },
-    data: {
-      accessPassword: parsed.accessPassword,
-      responseLimit: parsed.responseLimit,
-      cutoffAt: parsed.cutoffAt ? new Date(parsed.cutoffAt) : null,
-    },
-  });
-
-  revalidatePath(`/surveys/${surveyId}/publish`);
-  revalidatePath(`/s/${survey.slug}`);
-}
-
-/** Lets the owner pick the end of the public link (/s/<slug>). */
-export async function updateSlug(surveyId: string, slug: string): Promise<ActionResult> {
-  const ownerId = await requireUserId();
-  const result = slugSchema.safeParse(slug);
-  if (!result.success) return { error: result.error.issues[0].message };
-  const parsed = result.data;
-
-  const survey = await prisma.survey.findFirst({
-    where: { id: surveyId, ownerId },
-    select: { slug: true },
-  });
-  if (!survey) return { error: "Encuesta no encontrada" };
-  if (survey.slug === parsed) return {};
-
-  const taken = await prisma.survey.findUnique({ where: { slug: parsed }, select: { id: true } });
-  if (taken) return { error: "Ese final de link ya está en uso, probá con otro" };
-
-  await prisma.survey.update({ where: { id: surveyId, ownerId }, data: { slug: parsed } });
-
-  revalidatePath(`/surveys/${surveyId}/publish`);
-  revalidatePath(`/s/${survey.slug}`);
-  revalidatePath(`/s/${parsed}`);
-  return {};
-}
-
-/** Link preview, redirect after answering and disqualification screen. */
+/** Link preview (title, description, image) shared by every collector of the survey. */
 export async function updateSharingOptions(
   surveyId: string,
   input: SharingOptionsInput,
@@ -176,16 +104,13 @@ export async function updateSharingOptions(
   const result = sharingOptionsSchema.safeParse(input);
   if (!result.success) return { error: result.error.issues[0].message };
 
-  const survey = await prisma.survey.findFirst({
-    where: { id: surveyId, ownerId },
-    select: { slug: true },
-  });
+  const survey = await prisma.survey.findFirst({ where: { id: surveyId, ownerId }, select: { id: true } });
   if (!survey) return { error: "Encuesta no encontrada" };
 
   await prisma.survey.update({ where: { id: surveyId, ownerId }, data: result.data });
 
   revalidatePath(`/surveys/${surveyId}/publish`);
-  revalidatePath(`/s/${survey.slug}`);
+  await revalidateCollectorPages(surveyId);
   return {};
 }
 
@@ -208,10 +133,7 @@ export async function updateCustomVariables(
     return { error: `«${RESERVED_VARIABLE_NAMES.join(", ")}» ya lo usa el link público` };
   }
 
-  const survey = await prisma.survey.findFirst({
-    where: { id: surveyId, ownerId },
-    select: { slug: true },
-  });
+  const survey = await prisma.survey.findFirst({ where: { id: surveyId, ownerId }, select: { id: true } });
   if (!survey) return { error: "Encuesta no encontrada" };
 
   await prisma.survey.update({
@@ -226,7 +148,7 @@ export async function updateCustomVariables(
 
   revalidatePath(`/surveys/${surveyId}/publish`);
   revalidatePath(`/surveys/${surveyId}/results`);
-  revalidatePath(`/s/${survey.slug}`);
+  await revalidateCollectorPages(surveyId);
   return {};
 }
 
@@ -253,17 +175,22 @@ export async function duplicateSurvey(surveyId: string): Promise<string> {
     ...design
   } = survey;
 
+  const copySlug = slugify(survey.title);
   const copy = await prisma.survey.create({
     data: {
       ...design,
       ownerId,
       title: `${survey.title} (copia)`,
-      slug: slugify(survey.title),
+      slug: copySlug,
       status: "draft",
       accessPassword: null,
       responseLimit: null,
       cutoffAt: null,
+      endRedirectUrl: null,
+      disqualifyMessage: null,
+      disqualifyRedirectUrl: null,
       analysisViews: [],
+      collectors: { create: { name: "Enlace web 1", slug: copySlug } },
       customVariables: parseCustomVariables(survey.customVariables).map((variable) => ({
         name: variable.name,
         label: variable.label || undefined,

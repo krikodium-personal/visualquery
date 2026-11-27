@@ -9,7 +9,11 @@ export default async function DashboardPage() {
   const surveys = await prisma.survey.findMany({
     where: { ownerId: session!.user.id },
     orderBy: { updatedAt: "desc" },
-    include: { _count: { select: { responses: true } } },
+    include: {
+      _count: { select: { responses: true } },
+      // The dashboard links to the survey's first (oldest) public link.
+      collectors: { orderBy: { createdAt: "asc" }, take: 1, select: { slug: true } },
+    },
   });
 
   return (
@@ -36,7 +40,7 @@ export default async function DashboardPage() {
               id={survey.id}
               title={survey.title}
               status={survey.status}
-              slug={survey.slug}
+              slug={survey.collectors[0]?.slug ?? survey.slug}
               responseCount={survey._count.responses}
               updatedAt={survey.updatedAt.toISOString()}
             />

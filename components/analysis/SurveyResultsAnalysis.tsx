@@ -42,9 +42,22 @@ export function SurveyResultsAnalysis({
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
   const [tab, setTab] = useState("summary");
 
+  // Which collector (link) the responses came through; "all" shows everything.
+  const [collectorFilter, setCollectorFilter] = useState<string>("all");
+  const hasOrphanResponses = data.responses.some((r) => r.collectorId === null);
+  const collectorResponses = useMemo(
+    () =>
+      collectorFilter === "all"
+        ? data.responses
+        : data.responses.filter((r) =>
+            collectorFilter === "none" ? r.collectorId === null : r.collectorId === collectorFilter,
+          ),
+    [data.responses, collectorFilter],
+  );
+
   const filteredResponses = useMemo(
-    () => applyFilterRules(data.responses, rules.filters),
-    [data.responses, rules.filters],
+    () => applyFilterRules(collectorResponses, rules.filters),
+    [collectorResponses, rules.filters],
   );
 
   const compare = activeCompare(rules);
@@ -57,7 +70,7 @@ export function SurveyResultsAnalysis({
 
   const activeCount = countActiveRules(rules);
   const chips = activeRuleChips(rules, data.questions);
-  const totalResponses = data.responses.length;
+  const totalResponses = collectorResponses.length;
   const filteredCount = filteredResponses.length;
   const completedResponses = filteredResponses.filter((r) => r.completedAt).length;
   const completionRate =
@@ -81,6 +94,7 @@ export function SurveyResultsAnalysis({
       questionsShown,
       filteredResponses,
       data.customVariables.map((variable) => variable.name),
+      new Map(data.collectors.map((collector) => [collector.id, collector.name])),
     );
     const slug = data.surveyTitle
       .toLowerCase()
@@ -113,6 +127,22 @@ export function SurveyResultsAnalysis({
           <p className="text-sm text-muted-foreground">{data.surveyTitle}</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {data.collectors.length > 1 || hasOrphanResponses ? (
+            <select
+              aria-label="Filtrar por recopilador"
+              className="h-9 rounded-md border bg-background px-2 text-sm"
+              value={collectorFilter}
+              onChange={(event) => setCollectorFilter(event.target.value)}
+            >
+              <option value="all">Todos los recopiladores</option>
+              {data.collectors.map((collector) => (
+                <option key={collector.id} value={collector.id}>
+                  {collector.name}
+                </option>
+              ))}
+              {hasOrphanResponses ? <option value="none">Recopilador eliminado</option> : null}
+            </select>
+          ) : null}
           <Button variant="outline" className="gap-1.5" onClick={exportCsv}>
             <Download className="size-4" />
             Exportar CSV
@@ -245,6 +275,7 @@ export function SurveyResultsAnalysis({
             questions={questionsShown}
             responses={filteredResponses}
             customVariables={data.customVariables}
+            collectorNames={new Map(data.collectors.map((collector) => [collector.id, collector.name]))}
           />
         </TabsContent>
 

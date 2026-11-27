@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { findRootQuestion } from "@/lib/flow-engine";
 import { prisma } from "@/lib/prisma";
 import { parseCustomVariables, pickVariableValues } from "@/lib/custom-variables";
+import { collectorClosedReason } from "@/lib/collectors";
 import { fullQuotaValues } from "@/lib/quotas";
 import { parseOptions } from "@/lib/question-options";
 import {
@@ -26,17 +27,23 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const survey = await prisma.survey.findFirst({
-    where: { slug, status: { in: ["published", "closed"] } },
+  const collector = await prisma.collector.findUnique({
+    where: { slug },
     select: {
-      title: true,
-      description: true,
-      shareTitle: true,
-      shareDescription: true,
-      shareImageUrl: true,
+      survey: {
+        select: {
+          status: true,
+          title: true,
+          description: true,
+          shareTitle: true,
+          shareDescription: true,
+          shareImageUrl: true,
+        },
+      },
     },
   });
-  if (!survey) return {};
+  const survey = collector?.survey;
+  if (!survey || survey.status === "draft") return {};
 
   const title = survey.shareTitle || survey.title;
   const description = survey.shareDescription || survey.description || undefined;
@@ -64,16 +71,16 @@ export default async function PublicSurveyPage({
   const embed = Array.isArray(query.embed) ? query.embed[0] : query.embed;
   const isEmbed = embed === "1" || embed === "true";
 
-  const survey = await prisma.survey.findFirst({
-    where: { slug, status: { in: ["published", "closed"] } },
+  const collector = await prisma.collector.findUnique({
+    where: { slug },
     include: {
-      questions: { orderBy: { createdAt: "asc" } },
-      edges: true,
+      survey: { include: { questions: { orderBy: { createdAt: "asc" } }, edges: true } },
       _count: { select: { responses: true } },
     },
   });
+  const survey = collector?.survey;
 
-  if (!survey) notFound();
+  if (!collector || !survey || survey.status === "draft") notFound();
 
   if (survey.status === "closed") {
     return (
@@ -84,19 +91,12 @@ export default async function PublicSurveyPage({
     );
   }
 
-  const pastCutoff = survey.cutoffAt !== null && survey.cutoffAt.getTime() <= Date.now();
-  const atLimit =
-    survey.responseLimit !== null && survey._count.responses >= survey.responseLimit;
-
-  if (pastCutoff || atLimit) {
+  const closedReason = collectorClosedReason(collector, collector._count.responses);
+  if (closedReason) {
     return (
       <main className="flex min-h-svh flex-col items-center justify-center gap-3 p-6 text-center">
         <h1 className="text-2xl font-semibold">{survey.title}</h1>
-        <p className="text-muted-foreground">
-          {pastCutoff
-            ? "Esta encuesta ya alcanzó su fecha de cierre."
-            : "Esta encuesta alcanzó el límite de respuestas."}
-        </p>
+        <p className="text-muted-foreground">{closedReason}</p>
       </main>
     );
   }
@@ -141,17 +141,18 @@ export default async function PublicSurveyPage({
 
   return (
     <SurveyPasswordGate
-      surveyId={survey.id}
-      accessPassword={survey.accessPassword}
+      surveyId={collector.id}
+      accessPassword={collector.accessPassword}
       title={survey.title}
     >
       <div className={`flex flex-col ${isEmbed ? "min-h-[640px]" : "min-h-svh"}`}>
         <SurveyRunner
           surveyId={survey.id}
+          collectorId={collector.id}
           variables={variables}
-          endRedirectUrl={survey.endRedirectUrl}
-          disqualifyMessage={survey.disqualifyMessage}
-          disqualifyRedirectUrl={survey.disqualifyRedirectUrl}
+          endRedirectUrl={collector.endRedirectUrl}
+          disqualifyMessage={collector.disqualifyMessage}
+          disqualifyRedirectUrl={collector.disqualifyRedirectUrl}
           title={survey.title}
           description={survey.description}
           questions={questions}

@@ -61,7 +61,8 @@ model Survey {
   thankYouImageUrl  String?
   thankYouImageMode String @default("header") // header | background
 
-  // Collector options (web link) — SurveyMonkey-style access controls.
+  // LEGACY: these now live on Collector (copied by the 20261127200000 migration). Kept only so
+  // the previously deployed code keeps working until they are dropped in a follow-up migration.
   accessPassword String?
   responseLimit  Int?
   cutoffAt       DateTime?
@@ -74,9 +75,8 @@ model Survey {
   shareDescription String?
   shareImageUrl    String?
 
-  // After answering: redirect to this URL instead of staying on the thank-you screen.
-  endRedirectUrl String?
-  // Disqualified respondents: custom message and/or redirect URL.
+  // LEGACY (moved to Collector, see above).
+  endRedirectUrl        String?
   disqualifyMessage     String?
   disqualifyRedirectUrl String?
 
@@ -87,6 +87,7 @@ model Survey {
   edges         Edge[]
   responses     Response[]
   notifications Notification[]
+  collectors    Collector[]
 }
 
 enum QuestionType {
@@ -160,6 +161,9 @@ model Response {
   survey      Survey    @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   startedAt   DateTime  @default(now())
   completedAt DateTime?
+  // Collector (link) the respondent came through; null once that collector is deleted.
+  collectorId String?
+  collector   Collector? @relation(fields: [collectorId], references: [id], onDelete: SetNull)
   // Respondent reached a "Descalificar" destination (kept apart from real results).
   disqualified Boolean   @default(false)
   // Values of the survey's custom variables read from the link, { name: value }.
@@ -168,6 +172,7 @@ model Response {
   answers Answer[]
 
   @@index([surveyId])
+  @@index([collectorId])
 }
 
 model Answer {
@@ -194,10 +199,40 @@ model Notification {
   type      String // new_responses | limit_reached
   day       String
   count     Int       @default(1)
+  detail    String? // e.g. the collector's name for limit_reached
   readAt    DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
   @@unique([userId, surveyId, type, day])
   @@index([userId, updatedAt])
+}
+
+// A way of reaching respondents (today: a web link). Each one has its own public URL, state,
+// access rules and response count.
+model Collector {
+  id       String @id @default(cuid())
+  surveyId String
+  survey   Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  name     String
+  type     String @default("link") // link
+  slug     String @unique
+  status   String @default("open") // open | closed
+
+  accessPassword String?
+  responseLimit  Int?
+  cutoffAt       DateTime?
+
+  // After answering: redirect to this URL instead of staying on the thank-you screen.
+  endRedirectUrl        String?
+  // Disqualified respondents: custom message and/or redirect URL.
+  disqualifyMessage     String?
+  disqualifyRedirectUrl String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  responses Response[]
+
+  @@index([surveyId])
 }

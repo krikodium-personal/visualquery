@@ -12,11 +12,11 @@ function localDay(date = new Date()): string {
  * survey per day with a running count, plus a once-only "limit_reached" when the cap is hit.
  * Never throws — a notification failing must not break the respondent's submission.
  */
-export async function notifyResponseCompleted(surveyId: string) {
+export async function notifyResponseCompleted(surveyId: string, collectorId: string | null = null) {
   try {
     const survey = await prisma.survey.findUnique({
       where: { id: surveyId },
-      select: { ownerId: true, responseLimit: true, _count: { select: { responses: true } } },
+      select: { ownerId: true },
     });
     if (!survey) return;
 
@@ -29,10 +29,18 @@ export async function notifyResponseCompleted(surveyId: string) {
       update: { count: { increment: 1 }, readAt: null },
     });
 
-    if (survey.responseLimit !== null && survey._count.responses >= survey.responseLimit) {
+    const collector = collectorId
+      ? await prisma.collector.findUnique({
+          where: { id: collectorId },
+          select: { name: true, responseLimit: true, _count: { select: { responses: true } } },
+        })
+      : null;
+    if (collector && collector.responseLimit !== null && collector._count.responses >= collector.responseLimit) {
       await prisma.notification.upsert({
-        where: { userId_surveyId_type_day: { ...base, type: "limit_reached", day: "once" } },
-        create: { ...base, type: "limit_reached", day: "once", count: 1 },
+        where: {
+          userId_surveyId_type_day: { ...base, type: "limit_reached", day: `once-${collectorId}` },
+        },
+        create: { ...base, type: "limit_reached", day: `once-${collectorId}`, count: 1, detail: collector.name },
         update: {},
       });
     }

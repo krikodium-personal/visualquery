@@ -32,6 +32,7 @@ function NotificationText({ item }: { item: NotificationItem }) {
   if (item.type === "limit_reached") {
     return (
       <>
+        {item.detail ? <>El recopilador «{item.detail}» de </> : null}
         <span className="font-medium underline underline-offset-2">{title}</span> alcanzó el
         límite de respuestas.
       </>

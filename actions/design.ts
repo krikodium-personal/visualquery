@@ -119,6 +119,7 @@ export async function updateSurveyDesign(surveyId: string, input: SurveyDesignIn
   revalidatePath(`/surveys/${surveyId}/design`);
   revalidatePath(`/surveys/${surveyId}/questions`);
   revalidatePath(`/surveys/${surveyId}/preview`);
-  revalidatePath(`/s/${survey.slug}`);
+  const collectors = await prisma.collector.findMany({ where: { surveyId }, select: { slug: true } });
+  for (const collector of collectors) revalidatePath(`/s/${collector.slug}`);
   revalidatePath("/dashboard");
 }
