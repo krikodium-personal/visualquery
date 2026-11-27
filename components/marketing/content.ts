@@ -491,7 +491,7 @@ const en: Content = {
   types: {
     title: "18 question types, all as nodes",
     intro: "Combine them on the canvas and customize how the survey looks with your logo, colors and fonts.",
-    groups: ["Selection", "Rating", "Text box", "Forms"],
+    groups: ["Choice", "Rating", "Text box", "Forms"],
     labels: {
       single_choice: "Multiple choice",
       multi_choice: "Checkboxes",
@@ -546,7 +546,7 @@ const en: Content = {
       },
       {
         q: "How many branches can I build?",
-        a: "As many as you need. Each option of a selection question can lead to a different question or end the survey.",
+        a: "As many as you need. Each answer option can lead to a different question or end the survey.",
       },
       {
         q: "Can I organize a survey with lots of questions?",
