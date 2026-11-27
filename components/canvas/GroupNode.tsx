@@ -12,6 +12,8 @@ export type GroupNodeData = {
   count: number;
   /** A card is being dragged over this group: it will be added on drop. */
   highlight?: boolean;
+  /** A card is being dragged out of this group while holding Ctrl: it will leave on drop. */
+  leaving?: boolean;
   onRename: (name: string) => void;
   onUngroup: () => void;
   [key: string]: unknown;
@@ -61,6 +63,7 @@ export function GroupNode({ data }: NodeProps<GroupFlowNode>) {
         "pointer-events-none h-full w-full rounded-2xl border-2 border-dashed transition-shadow",
         tone.box,
         data.highlight && "border-solid shadow-[0_0_0_6px] shadow-foreground/15 ring-2 ring-foreground/60",
+        data.leaving && "border-rose-500 bg-rose-500/10",
       )}
     >
       <div
@@ -91,6 +94,9 @@ export function GroupNode({ data }: NodeProps<GroupFlowNode>) {
             {data.name}
           </span>
         )}
+        {data.leaving ? (
+          <span className="shrink-0 rounded-full bg-rose-600 px-2 py-0.5 text-xs font-medium text-white">Se quitará del grupo</span>
+        ) : null}
         {data.highlight ? (
           <span className="shrink-0 rounded-full bg-foreground px-2 py-0.5 text-xs font-medium text-background">Suelta para agregar</span>
         ) : null}

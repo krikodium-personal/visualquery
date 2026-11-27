@@ -1035,6 +1035,13 @@ export function Canvas({
   const [groupPending, setGroupPending] = useState(false);
   /** Group under the card being dragged (it will join that group on drop). */
   const [dropGroupId, setDropGroupId] = useState<string | null>(null);
+  /** Ctrl/⌘ + drag on a grouped card: the group's frame stays put so the card can be dragged out of it. */
+  const [leaving, setLeaving] = useState<{
+    groupId: string;
+    rect: { x: number; y: number; w: number; h: number };
+    outside: boolean;
+  } | null>(null);
+  const dragStartRef = useRef<{ groupId: string; rect: { x: number; y: number; w: number; h: number } } | null>(null);
 
   function handleRenameGroup(id: string, name: string) {
     const previous = groups.find((g) => g.id === id)?.name;
@@ -1127,13 +1134,15 @@ export function Canvas({
       const minY = Math.min(...rects.map((r) => r.y)) - GROUP_PADDING - GROUP_HEADER;
       const maxX = Math.max(...rects.map((r) => r.x + r.w)) + GROUP_PADDING;
       const maxY = Math.max(...rects.map((r) => r.y + r.h)) + GROUP_PADDING;
+      const frozen = leaving?.groupId === group.id ? leaving.rect : null;
+      const box = frozen ?? { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
       result.push({
         id: GROUP_ID_PREFIX + group.id,
         type: "group",
-        position: { x: minX, y: minY },
-        width: maxX - minX,
-        height: maxY - minY,
-        style: { width: maxX - minX, height: maxY - minY },
+        position: { x: box.x, y: box.y },
+        width: box.w,
+        height: box.h,
+        style: { width: box.w, height: box.h },
         zIndex: -1,
         dragHandle: ".group-drag-handle",
         connectable: false,
@@ -1144,6 +1153,7 @@ export function Canvas({
           color: group.color,
           count: members.length,
           highlight: group.id === dropGroupId,
+          leaving: leaving?.groupId === group.id && leaving.outside,
           onRename: (name: string) => handleRenameGroup(group.id, name),
           onUngroup: () => handleUngroup(group.id),
         },
@@ -1151,7 +1161,7 @@ export function Canvas({
     }
     return result;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groups, membership, nodes, dropGroupId]);
+  }, [groups, membership, nodes, dropGroupId, leaving]);
 
   /** The other group whose box holds the centre of the dragged card, if any. */
   function groupUnderCard(node: { id: string; position: { x: number; y: number }; measured?: { width?: number; height?: number } }) {
@@ -1170,17 +1180,73 @@ export function Canvas({
     return null;
   }
 
-  function handleNodeDrag(_event: unknown, node: QuestionNode) {
+  function handleNodeDragStart(_event: unknown, node: QuestionNode) {
+    const groupId = node.type === "question" ? membershipRef.current[node.id] : undefined;
+    const box = groupId ? groupNodes.find((g) => g.id === GROUP_ID_PREFIX + groupId) : undefined;
+    dragStartRef.current =
+      groupId && box
+        ? { groupId, rect: { x: box.position.x, y: box.position.y, w: box.width ?? 0, h: box.height ?? 0 } }
+        : null;
+  }
+
+  function handleNodeDrag(event: unknown, node: QuestionNode) {
     if (node.type !== "question") return;
     const target = groupUnderCard(node);
     setDropGroupId((current) => (current === target ? current : target));
+
+    // Holding Ctrl (⌘) while dragging a grouped card lets it leave: the frame stays where it was.
+    const mouse = event as { ctrlKey?: boolean; metaKey?: boolean };
+    const start = dragStartRef.current;
+    if ((mouse.ctrlKey || mouse.metaKey) && start && membershipRef.current[node.id] === start.groupId) {
+      const cx = node.position.x + (node.measured?.width ?? DEFAULT_CARD_SIZE.width) / 2;
+      const cy = node.position.y + (node.measured?.height ?? DEFAULT_CARD_SIZE.height) / 2;
+      const { x, y, w, h } = start.rect;
+      const outside = cx < x || cx > x + w || cy < y || cy > y + h;
+      setLeaving((current) =>
+        current && current.groupId === start.groupId && current.outside === outside
+          ? current
+          : { groupId: start.groupId, rect: start.rect, outside },
+      );
+    } else {
+      setLeaving((current) => (current === null ? current : null));
+    }
+  }
+
+  /** Takes the cards out of their group: instant on screen, saved in the background, undone on failure. */
+  function removeCardsFromGroupOptimistic(ids: string[]) {
+    const previousMembership = membershipRef.current;
+    const previousGroups = groups;
+    const nextMembership = Object.fromEntries(Object.entries(previousMembership).filter(([q]) => !ids.includes(q)));
+    setMembership(nextMembership);
+    setGroups((current) => current.filter((g) => Object.values(nextMembership).includes(g.id)));
+    void setQuestionsGroup(surveyId, ids, null)
+      .then((result) => {
+        if (result.error) throw new Error(result.error);
+        toast.success(ids.length > 1 ? "Preguntas quitadas del grupo" : "Pregunta quitada del grupo");
+      })
+      .catch((error: unknown) => {
+        setMembership(previousMembership);
+        setGroups(previousGroups);
+        toast.error(error instanceof Error ? error.message : "No se pudo quitar la pregunta del grupo");
+      });
   }
 
   function handleNodeDragStop(_event: unknown, node: QuestionNode, dragged: QuestionNode[]) {
     const target = dropGroupId;
+    const wasLeaving = leaving;
     setDropGroupId(null);
-    if (!target || node.type !== "question") return;
+    setLeaving(null);
+    dragStartRef.current = null;
+    if (node.type !== "question") return;
     const ids = (dragged.length > 0 ? dragged : [node]).filter((n) => n.type === "question").map((n) => n.id);
+    if (!target) {
+      // Dropped outside the frame it started in while holding Ctrl (⌘): the cards leave the group.
+      if (wasLeaving?.outside) {
+        const exiting = ids.filter((id) => membershipRef.current[id] === wasLeaving.groupId);
+        if (exiting.length > 0) removeCardsFromGroupOptimistic(exiting);
+      }
+      return;
+    }
     const name = groups.find((g) => g.id === target)?.name ?? "";
 
     // Optimistic: the card joins the group on screen right away; saving happens in the background
@@ -1361,6 +1427,7 @@ export function Canvas({
           edgesReconnectable
           reconnectRadius={EDGE_RECONNECT_RADIUS}
           elevateEdgesOnSelect
+          onNodeDragStart={handleNodeDragStart as never}
           onNodeDrag={handleNodeDrag as never}
           onNodeDragStop={handleNodeDragStop as never}
           multiSelectionKeyCode="Shift"
