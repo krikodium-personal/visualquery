@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { PLANS, yearlySavingsPercent, type Plan } from "@/lib/plans";
 
-export function PricingPlans() {
+export function PricingPlans({ loggedIn = false }: { loggedIn?: boolean }) {
   const [yearly, setYearly] = useState(true);
   const savings = yearlySavingsPercent(PLANS.find((plan) => plan.id === "pro")!);
 
@@ -33,14 +33,14 @@ export function PricingPlans() {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {PLANS.map((plan) => (
-          <PlanCard key={plan.id} plan={plan} yearly={yearly} />
+          <PlanCard key={plan.id} plan={plan} yearly={yearly} loggedIn={loggedIn} />
         ))}
       </div>
     </div>
   );
 }
 
-function PlanCard({ plan, yearly }: { plan: Plan; yearly: boolean }) {
+function PlanCard({ plan, yearly, loggedIn }: { plan: Plan; yearly: boolean; loggedIn: boolean }) {
   const price = yearly ? plan.yearly : plan.monthly;
   return (
     <Card className={cn("flex flex-col", plan.highlighted && "border-foreground ring-1 ring-foreground")}>
@@ -69,15 +69,21 @@ function PlanCard({ plan, yearly }: { plan: Plan; yearly: boolean }) {
         )}
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-5">
-        <Button
-          variant={plan.highlighted ? "default" : "outline"}
-          nativeButton={false}
-          render={
-            <Link href="/signup">
-              {plan.id === "free" ? "Empezar gratis" : plan.id === "enterprise" ? "Contactanos" : "Elegir plan"}
-            </Link>
-          }
-        />
+        {loggedIn ? (
+          <Button variant={plan.highlighted ? "default" : "outline"} disabled>
+            {plan.id === "free" ? "Tu plan actual" : "Próximamente"}
+          </Button>
+        ) : (
+          <Button
+            variant={plan.highlighted ? "default" : "outline"}
+            nativeButton={false}
+            render={
+              <Link href="/signup">
+                {plan.id === "free" ? "Empezar gratis" : plan.id === "enterprise" ? "Contactanos" : "Elegir plan"}
+              </Link>
+            }
+          />
+        )}
         <ul className="flex flex-col gap-1.5 border-b pb-4 text-sm font-medium">
           {plan.limits.map((limit) => (
             <li key={limit}>{limit}</li>

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth, signOut } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { PlansLink } from "@/components/account/PlansLink";
 import { AccountMenu } from "@/components/account/AccountMenu";
 import { NotificationCenter } from "@/components/notifications/NotificationCenter";
 import { DashboardHeaderActions } from "@/components/theme/DashboardHeader";
@@ -25,9 +26,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             Visualquery
           </Link>
           <DashboardHeaderActions>
-            <Link href="/precios" className="text-sm text-muted-foreground hover:text-foreground">
-              Planes
-            </Link>
+            <PlansLink />
             <NotificationCenter />
             <AccountMenu
               name={user?.name ?? null}
