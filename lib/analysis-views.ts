@@ -31,6 +31,23 @@ const filterRuleSchema = z.discriminatedUnion("kind", [
     dateFrom: z.string(),
     dateTo: z.string(),
   }),
+  z.object({
+    id: z.string(),
+    name: z.string(),
+    enabled: z.boolean(),
+    kind: z.literal("variable"),
+    variableName: z.string(),
+    variableLabel: z.string(),
+    value: z.string(),
+  }),
+  z.object({
+    id: z.string(),
+    name: z.string(),
+    enabled: z.boolean(),
+    kind: z.literal("duration"),
+    minMinutes: z.number().nullable(),
+    maxMinutes: z.number().nullable(),
+  }),
 ]);
 
 const compareRuleSchema = z.object({

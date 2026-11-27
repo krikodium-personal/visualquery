@@ -303,6 +303,7 @@ export function SurveyResultsAnalysis({
         open={panelOpen}
         onOpenChange={setPanelOpen}
         questions={data.questions}
+        customVariables={data.customVariables}
         value={rules}
         onChange={updateRules}
       />

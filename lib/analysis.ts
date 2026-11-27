@@ -55,6 +55,11 @@ export type AnalysisFilterState = {
   dateFrom: string;
   dateTo: string;
   questionFilters: QuestionAnswerFilter[];
+  /** Custom-variable values the response must carry (all must match, case-insensitive). */
+  variableFilters: { name: string; value: string }[];
+  /** Time between starting and finishing, in minutes; unfinished responses never match. */
+  durationMinMinutes: number | null;
+  durationMaxMinutes: number | null;
 };
 
 export type ChartViewMode =
@@ -76,6 +81,9 @@ export const EMPTY_FILTERS: AnalysisFilterState = {
   dateFrom: "",
   dateTo: "",
   questionFilters: [],
+  variableFilters: [],
+  durationMinMinutes: null,
+  durationMaxMinutes: null,
 };
 
 export const RATING_MAX = 5;
@@ -116,6 +124,8 @@ export function countActiveFilters(filters: AnalysisFilterState): number {
   if (filters.completeness !== "all") count += 1;
   if (filters.dateFrom || filters.dateTo) count += 1;
   count += filters.questionFilters.filter((f) => f.values.length > 0).length;
+  count += filters.variableFilters.length;
+  if (filters.durationMinMinutes !== null || filters.durationMaxMinutes !== null) count += 1;
   return count;
 }
 
@@ -133,6 +143,18 @@ export function filterResponses(
     const startedMs = new Date(response.startedAt).getTime();
     if (fromMs !== null && startedMs < fromMs) return false;
     if (toMs !== null && startedMs > toMs) return false;
+
+    for (const variableFilter of filters.variableFilters) {
+      const actual = response.variables[variableFilter.name] ?? "";
+      if (actual.toLowerCase() !== variableFilter.value.toLowerCase()) return false;
+    }
+
+    if (filters.durationMinMinutes !== null || filters.durationMaxMinutes !== null) {
+      if (!response.completedAt) return false;
+      const minutes = (new Date(response.completedAt).getTime() - startedMs) / 60000;
+      if (filters.durationMinMinutes !== null && minutes < filters.durationMinMinutes) return false;
+      if (filters.durationMaxMinutes !== null && minutes > filters.durationMaxMinutes) return false;
+    }
 
     for (const questionFilter of filters.questionFilters) {
       if (questionFilter.values.length === 0) continue;

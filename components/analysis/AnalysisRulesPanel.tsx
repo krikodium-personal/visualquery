@@ -13,6 +13,8 @@ import {
   createCompareRule,
   createCompletenessFilterRule,
   createPeriodFilterRule,
+  createVariableFilterRule,
+  createDurationFilterRule,
   createQuestionFilterRule,
   createShowRule,
   deleteParameter,
@@ -27,18 +29,20 @@ import {
 } from "@/lib/analysis-rules";
 
 type Mode = "list" | "filter" | "compare" | "show";
-type FilterDraftKind = "question_answer" | "completeness" | "period";
+type FilterDraftKind = "question_answer" | "completeness" | "period" | "variable" | "duration";
 
 export function AnalysisRulesPanel({
   open,
   onOpenChange,
   questions,
+  customVariables = [],
   value,
   onChange,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   questions: AnalysisQuestion[];
+  customVariables?: { name: string; label: string }[];
   value: AnalysisRulesState;
   onChange: (next: AnalysisRulesState) => void;
 }) {
@@ -49,6 +53,10 @@ export function AnalysisRulesPanel({
   const [completeness, setCompleteness] = useState<Exclude<CompletenessFilter, "all">>("completed");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [variableName, setVariableName] = useState("");
+  const [variableValue, setVariableValue] = useState("");
+  const [minMinutes, setMinMinutes] = useState("");
+  const [maxMinutes, setMaxMinutes] = useState("");
   const [compareQuestionId, setCompareQuestionId] = useState("");
   const [compareValues, setCompareValues] = useState<string[]>([]);
   const [showQuestionIds, setShowQuestionIds] = useState<string[]>([]);
@@ -67,6 +75,10 @@ export function AnalysisRulesPanel({
     setCompleteness("completed");
     setDateFrom("");
     setDateTo("");
+    setVariableName(customVariables[0]?.name ?? "");
+    setVariableValue("");
+    setMinMinutes("");
+    setMaxMinutes("");
     setCompareQuestionId(filterable[0]?.id ?? "");
     setCompareValues([]);
     setShowQuestionIds(questions.map((q) => q.id));
@@ -85,6 +97,16 @@ export function AnalysisRulesPanel({
       rule = createCompletenessFilterRule(completeness);
     } else if (filterKind === "period" && (dateFrom || dateTo)) {
       rule = createPeriodFilterRule(dateFrom, dateTo);
+    }
+    else if (filterKind === "variable") {
+      const variable = customVariables.find((v) => v.name === variableName) ?? customVariables[0];
+      if (variable && variableValue.trim()) {
+        rule = createVariableFilterRule(variable, variableValue.trim());
+      }
+    } else if (filterKind === "duration") {
+      const min = minMinutes === "" ? null : Number(minMinutes);
+      const max = maxMinutes === "" ? null : Number(maxMinutes);
+      if (min !== null || max !== null) rule = createDurationFilterRule(min, max);
     }
     if (!rule) return;
     onChange({ ...value, filters: [rule, ...value.filters] });
@@ -212,7 +234,9 @@ export function AnalysisRulesPanel({
             onApply={applyFilter}
             applyDisabled={
               (filterKind === "question_answer" && (!qaQuestion || qaValues.length === 0)) ||
-              (filterKind === "period" && !dateFrom && !dateTo)
+              (filterKind === "period" && !dateFrom && !dateTo) ||
+              (filterKind === "variable" && !variableValue.trim()) ||
+              (filterKind === "duration" && minMinutes === "" && maxMinutes === "")
             }
           >
             <div className="flex flex-col gap-1.5">
@@ -225,6 +249,10 @@ export function AnalysisRulesPanel({
                 <option value="question_answer">Pregunta y respuesta</option>
                 <option value="completeness">Completitud</option>
                 <option value="period">Periodo</option>
+                {customVariables.length > 0 ? (
+                  <option value="variable">Variable personalizada</option>
+                ) : null}
+                <option value="duration">Tiempo de respuesta</option>
               </select>
             </div>
 
@@ -272,6 +300,45 @@ export function AnalysisRulesPanel({
                     {label}
                   </label>
                 ))}
+              </div>
+            ) : null}
+
+            {filterKind === "variable" ? (
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col gap-1.5">
+                  <Label>Variable</Label>
+                  <select
+                    className="h-9 rounded-md border bg-background px-2 text-sm"
+                    value={variableName || customVariables[0]?.name}
+                    onChange={(e) => setVariableName(e.target.value)}
+                  >
+                    {customVariables.map((v) => (
+                      <option key={v.name} value={v.name}>
+                        {v.label || v.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label>Valor</Label>
+                  <Input value={variableValue} onChange={(e) => setVariableValue(e.target.value)} />
+                </div>
+              </div>
+            ) : null}
+
+            {filterKind === "duration" ? (
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col gap-1.5">
+                  <Label>Mínimo (min)</Label>
+                  <Input type="number" min={0} value={minMinutes} onChange={(e) => setMinMinutes(e.target.value)} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label>Máximo (min)</Label>
+                  <Input type="number" min={0} value={maxMinutes} onChange={(e) => setMaxMinutes(e.target.value)} />
+                </div>
+                <p className="col-span-2 text-xs text-muted-foreground">
+                  Solo cuenta respuestas finalizadas.
+                </p>
               </div>
             ) : null}
 

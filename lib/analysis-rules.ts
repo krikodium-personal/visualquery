@@ -32,6 +32,23 @@ export type FilterRule =
       kind: "period";
       dateFrom: string;
       dateTo: string;
+    }
+  | {
+      id: string;
+      name: string;
+      enabled: boolean;
+      kind: "variable";
+      variableName: string;
+      variableLabel: string;
+      value: string;
+    }
+  | {
+      id: string;
+      name: string;
+      enabled: boolean;
+      kind: "duration";
+      minMinutes: number | null;
+      maxMinutes: number | null;
     };
 
 /** SurveyMonkey Compare: pick 2+ answers of ONE closed-ended question. */
@@ -91,6 +108,8 @@ export function filterRuleLabel(rule: FilterRule, questions: AnalysisQuestion[])
   if (rule.kind === "period") {
     return `${rule.dateFrom || "…"} → ${rule.dateTo || "…"}`;
   }
+  if (rule.kind === "variable") return `${rule.variableLabel}: ${rule.value}`;
+  if (rule.kind === "duration") return durationLabel(rule.minMinutes, rule.maxMinutes);
   const question = questions.find((q) => q.id === rule.questionId);
   const labels = rule.values.map((value) =>
     question ? optionLabel(question, value) : value,
@@ -149,6 +168,42 @@ export function createPeriodFilterRule(dateFrom: string, dateTo: string): Filter
     kind: "period",
     dateFrom,
     dateTo,
+  };
+}
+
+function durationLabel(min: number | null, max: number | null): string {
+  if (min !== null && max !== null) return `Tiempo: ${min}–${max} min`;
+  if (min !== null) return `Tiempo: más de ${min} min`;
+  return `Tiempo: menos de ${max ?? 0} min`;
+}
+
+export function createVariableFilterRule(
+  variable: { name: string; label: string },
+  value: string,
+): FilterRule {
+  const variableLabel = variable.label || variable.name;
+  return {
+    id: rid("f"),
+    name: `${variableLabel}: ${value}`,
+    enabled: true,
+    kind: "variable",
+    variableName: variable.name,
+    variableLabel,
+    value,
+  };
+}
+
+export function createDurationFilterRule(
+  minMinutes: number | null,
+  maxMinutes: number | null,
+): FilterRule {
+  return {
+    id: rid("f"),
+    name: durationLabel(minMinutes, maxMinutes),
+    enabled: true,
+    kind: "duration",
+    minMinutes,
+    maxMinutes,
   };
 }
 
@@ -215,6 +270,9 @@ export function rulesToFilterState(rules: FilterRule[]): AnalysisFilterState {
   let dateFrom = "";
   let dateTo = "";
   const questionFilters: AnalysisFilterState["questionFilters"] = [];
+  const variableFilters: AnalysisFilterState["variableFilters"] = [];
+  let durationMinMinutes: number | null = null;
+  let durationMaxMinutes: number | null = null;
 
   for (const rule of enabled) {
     if (rule.kind === "completeness") completeness = rule.completeness;
@@ -222,12 +280,27 @@ export function rulesToFilterState(rules: FilterRule[]): AnalysisFilterState {
       dateFrom = rule.dateFrom;
       dateTo = rule.dateTo;
     }
+    if (rule.kind === "variable") {
+      variableFilters.push({ name: rule.variableName, value: rule.value });
+    }
+    if (rule.kind === "duration") {
+      durationMinMinutes = rule.minMinutes;
+      durationMaxMinutes = rule.maxMinutes;
+    }
     if (rule.kind === "question_answer" && rule.values.length > 0) {
       questionFilters.push({ questionId: rule.questionId, values: rule.values });
     }
   }
 
-  return { completeness, dateFrom, dateTo, questionFilters };
+  return {
+    completeness,
+    dateFrom,
+    dateTo,
+    questionFilters,
+    variableFilters,
+    durationMinMinutes,
+    durationMaxMinutes,
+  };
 }
 
 export function applyFilterRules(
