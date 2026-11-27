@@ -6,10 +6,13 @@ import { Check } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { fill, type Content } from "@/components/marketing/content";
 import { cn } from "@/lib/utils";
 import { PLANS, yearlySavingsPercent, type Plan } from "@/lib/plans";
 
-export function PricingPlans({ loggedIn = false }: { loggedIn?: boolean }) {
+type PricingText = Content["pricing"];
+
+export function PricingPlans({ loggedIn = false, t }: { loggedIn?: boolean; t: PricingText }) {
   const [yearly, setYearly] = useState(true);
   const savings = yearlySavingsPercent(PLANS.find((plan) => plan.id === "pro")!);
 
@@ -26,44 +29,44 @@ export function PricingPlans({ loggedIn = false }: { loggedIn?: boolean }) {
               yearly === isYearly ? "bg-foreground text-background" : "text-muted-foreground",
             )}
           >
-            {isYearly ? `Anual (−${savings}%)` : "Mensual"}
+            {isYearly ? fill(t.yearly, { pct: savings }) : t.monthly}
           </button>
         ))}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {PLANS.map((plan) => (
-          <PlanCard key={plan.id} plan={plan} yearly={yearly} loggedIn={loggedIn} />
+          <PlanCard key={plan.id} plan={plan} yearly={yearly} loggedIn={loggedIn} t={t} />
         ))}
       </div>
     </div>
   );
 }
 
-function PlanCard({ plan, yearly, loggedIn }: { plan: Plan; yearly: boolean; loggedIn: boolean }) {
+function PlanCard({ plan, yearly, loggedIn, t }: { plan: Plan; yearly: boolean; loggedIn: boolean; t: PricingText }) {
   const price = yearly ? plan.yearly : plan.monthly;
+  const text = t.plans[plan.id];
+  const ctaLabel = plan.id === "free" ? t.startFree : plan.id === "enterprise" ? t.contact : t.choose;
   return (
     <Card className={cn("flex flex-col", plan.highlighted && "border-foreground ring-1 ring-foreground")}>
       <CardHeader className="gap-2">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg">{plan.name}</CardTitle>
-          {plan.highlighted ? <Badge>Más elegido</Badge> : null}
+          <CardTitle className="text-lg">{text.name}</CardTitle>
+          {plan.highlighted ? <Badge>{t.popular}</Badge> : null}
         </div>
-        <p className="min-h-10 text-sm text-muted-foreground">{plan.tagline}</p>
+        <p className="min-h-10 text-sm text-muted-foreground">{text.tagline}</p>
         <p className="mt-2 flex items-baseline gap-1">
           {price === null ? (
-            <span className="text-3xl font-semibold">A medida</span>
+            <span className="text-3xl font-semibold">{t.custom}</span>
           ) : (
             <>
-              <span className="text-4xl font-semibold tracking-tight">
-                {price === 0 ? "Gratis" : `US$${price}`}
-              </span>
-              {price > 0 ? <span className="text-sm text-muted-foreground">/mes</span> : null}
+              <span className="text-4xl font-semibold tracking-tight">{price === 0 ? t.free : `US$${price}`}</span>
+              {price > 0 ? <span className="text-sm text-muted-foreground">{t.perMonth}</span> : null}
             </>
           )}
         </p>
         {price !== null && price > 0 && yearly ? (
-          <p className="text-xs text-muted-foreground">Facturado US${price * 12} por año</p>
+          <p className="text-xs text-muted-foreground">{fill(t.billedYearly, { amount: price * 12 })}</p>
         ) : (
           <p className="text-xs text-muted-foreground">&nbsp;</p>
         )}
@@ -71,26 +74,22 @@ function PlanCard({ plan, yearly, loggedIn }: { plan: Plan; yearly: boolean; log
       <CardContent className="flex flex-1 flex-col gap-5">
         {loggedIn ? (
           <Button variant={plan.highlighted ? "default" : "outline"} disabled>
-            {plan.id === "free" ? "Tu plan actual" : "Próximamente"}
+            {plan.id === "free" ? t.current : t.soonShort}
           </Button>
         ) : (
           <Button
             variant={plan.highlighted ? "default" : "outline"}
             nativeButton={false}
-            render={
-              <Link href="/signup">
-                {plan.id === "free" ? "Empezar gratis" : plan.id === "enterprise" ? "Contactanos" : "Elegir plan"}
-              </Link>
-            }
+            render={<Link href="/signup">{ctaLabel}</Link>}
           />
         )}
         <ul className="flex flex-col gap-1.5 border-b pb-4 text-sm font-medium">
-          {plan.limits.map((limit) => (
+          {text.limits.map((limit) => (
             <li key={limit}>{limit}</li>
           ))}
         </ul>
         <ul className="flex flex-col gap-2 text-sm">
-          {plan.features.map((feature) => (
+          {text.features.map((feature) => (
             <li key={feature} className="flex gap-2">
               <Check className="mt-0.5 size-4 shrink-0 text-emerald-600" />
               <span>{feature}</span>

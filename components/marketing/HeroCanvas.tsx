@@ -4,6 +4,8 @@
  * travelling each route show what one respondent sees.
  * Colours match the product: blue = next question, green = branch by answer, red = ending.
  */
+import type { Content } from "@/components/marketing/content";
+
 const BLUE = "#3b6cf6";
 const GREEN = "#2e9e6b";
 const RED = "#d6463b";
@@ -52,13 +54,13 @@ const YES_ROUTE =
   "M280 263 C330 263 330 70 380 70 L510 70 L510 208 L640 208 C700 208 700 330 740 330";
 const NO_ROUTE = "M280 291 C330 291 330 440 430 440 L640 440 C700 440 700 330 740 330";
 
-export function HeroCanvas() {
+export function HeroCanvas({ t }: { t: Content["canvas"] }) {
   return (
     <div className="overflow-x-auto">
       <svg
         viewBox="0 0 960 520"
         role="img"
-        aria-label="Ejemplo de encuesta en el canvas: una pregunta de sí o no. Quien responde sí sigue por dos preguntas más; quien responde no salta directo a la pantalla final."
+        aria-label={t.aria}
         className="mx-auto block h-auto min-w-[760px] w-full max-w-[1100px]"
       >
         {/* Edges first, so nodes sit on top. */}
@@ -69,7 +71,7 @@ export function HeroCanvas() {
           <path d="M280 291 C330 291 330 440 430 440 L640 440 C700 440 700 330 740 330" stroke={RED} />
         </g>
         <text x={455} y={464} fontSize={12} className="fill-muted-foreground">
-          Salta las preguntas
+          {t.skip}
         </text>
 
         {/* Respondents travelling each route; hidden behind nodes while inside them. */}
@@ -92,10 +94,10 @@ export function HeroCanvas() {
           <animateMotion dur="4s" begin="2s" repeatCount="indefinite" path={NO_ROUTE} calcMode="linear" />
         </circle>
 
-        <Node x={30} y={205} w={250} h={116} title="¿Usaste el servicio?">
+        <Node x={30} y={205} w={250} h={116} title={t.q1}>
           {[
-            ["Sí", 267, GREEN],
-            ["No", 295, RED],
+            [t.yes, 267, GREEN],
+            [t.no, 295, RED],
           ].map(([label, y, color]) => (
             <g key={String(label)}>
               <line x1={30} x2={280} y1={Number(y) - 17} y2={Number(y) - 17} className="stroke-border" />
@@ -107,7 +109,7 @@ export function HeroCanvas() {
           ))}
         </Node>
 
-        <Node x={380} y={20} w={260} h={100} title="¿Cómo fue la atención?">
+        <Node x={380} y={20} w={260} h={100} title={t.q2}>
           {[0, 1, 2, 3, 4].map((i) => (
             <polygon
               key={i}
@@ -122,11 +124,11 @@ export function HeroCanvas() {
         <Port x={380} y={70} color={GREEN} />
         <Port x={510} y={120} color={BLUE} />
 
-        <Node x={380} y={150} w={260} h={116} title="¿Qué pasó?">
+        <Node x={380} y={150} w={260} h={116} title={t.q3}>
           {[
-            ["Demoras", 204, true],
-            ["Trato", 224, false],
-            ["Precio", 244, false],
+            [t.options[0], 204, true],
+            [t.options[1], 224, false],
+            [t.options[2], 244, false],
           ].map(([label, y, checked]) => (
             <g key={String(label)}>
               <rect
@@ -160,7 +162,7 @@ export function HeroCanvas() {
         <g>
           <rect x={740} y={300} width={190} height={60} rx={30} className="fill-card" stroke={RED} strokeWidth={2} />
           <text x={835} y={335} textAnchor="middle" className="fill-foreground" fontSize={15} fontWeight={600}>
-            Fin · ¡Gracias!
+            {t.end}
           </text>
           <Port x={740} y={330} color={BLUE} />
         </g>
@@ -168,11 +170,11 @@ export function HeroCanvas() {
         {/* Legend */}
         <g fontSize={12} className="fill-muted-foreground">
           <line x1={30} x2={56} y1={500} y2={500} stroke={GREEN} strokeWidth={2.5} strokeLinecap="round" />
-          <text x={64} y={504}>Rama según la respuesta</text>
+          <text x={64} y={504}>{t.legend[0]}</text>
           <line x1={250} x2={276} y1={500} y2={500} stroke={BLUE} strokeWidth={2.5} strokeLinecap="round" />
-          <text x={284} y={504}>Siguiente pregunta</text>
+          <text x={284} y={504}>{t.legend[1]}</text>
           <line x1={440} x2={466} y1={500} y2={500} stroke={RED} strokeWidth={2.5} strokeLinecap="round" />
-          <text x={474} y={504}>Salto al final</text>
+          <text x={474} y={504}>{t.legend[2]}</text>
         </g>
       </svg>
     </div>
