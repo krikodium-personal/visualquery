@@ -234,17 +234,20 @@ export function ContactsManager({ contacts, groups }: { contacts: ContactRow[]; 
         </section>
       </div>
 
+      {dialog?.kind === "contact" ? (
       <ContactDialog
-        key={`contact-${dialog?.kind === "contact" ? (dialog.contact?.id ?? "new") : "closed"}`}
-        open={dialog?.kind === "contact"}
+        open
         contact={dialog?.kind === "contact" ? dialog.contact : null}
         pending={pending}
         onClose={() => setDialog(null)}
-        onSubmit={(input, id) =>
-          run(() => (id ? updateContact(id, input) : createContact(input, activeGroup?.id)), id ? "Contacto actualizado" : "Contacto agregado")
+        groups={groups}
+        defaultGroupId={activeGroup?.id ?? ""}
+        onSubmit={(input, id, group) =>
+          run(() => (id ? updateContact(id, input) : createContact(input, group)), id ? "Contacto actualizado" : "Contacto agregado")
         }
         onDelete={(id) => run(() => deleteContacts([id]), "Contacto eliminado")}
       />
+      ) : null}
       <ImportDialog
         open={dialog?.kind === "import"}
         pending={pending}
@@ -334,12 +337,16 @@ const FIELDS: { key: keyof ContactInput; label: string; type?: string }[] = [
   { key: "custom3", label: "Campo personalizado 3" },
 ];
 
+const NEW_GROUP = "__new__";
+
 function ContactDialog({
-  open, contact, pending, onClose, onSubmit, onDelete,
+  open, contact, groups, defaultGroupId, pending, onClose, onSubmit, onDelete,
 }: {
-  open: boolean; contact: ContactRow | null; pending: boolean; onClose: () => void;
-  onSubmit: (input: ContactInput, id?: string) => void; onDelete: (id: string) => void;
+  open: boolean; contact: ContactRow | null; groups: Group[]; defaultGroupId: string; pending: boolean; onClose: () => void;
+  onSubmit: (input: ContactInput, id?: string, group?: { id?: string; newName?: string }) => void; onDelete: (id: string) => void;
 }) {
+  const [groupChoice, setGroupChoice] = useState(defaultGroupId);
+  const [newGroupName, setNewGroupName] = useState("");
   const [values, setValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(FIELDS.map((f) => [f.key, (contact?.[f.key as keyof ContactRow] as string | null) ?? ""])),
   );
@@ -354,7 +361,13 @@ function ContactDialog({
           className="flex flex-col gap-3"
           onSubmit={(event) => {
             event.preventDefault();
-            onSubmit(values as unknown as ContactInput, contact?.id);
+            const group =
+              groupChoice === NEW_GROUP
+                ? { newName: newGroupName }
+                : groupChoice
+                  ? { id: groupChoice }
+                  : undefined;
+            onSubmit(values as unknown as ContactInput, contact?.id, group);
           }}
         >
           {FIELDS.map((f) => (
@@ -378,6 +391,33 @@ function ContactDialog({
               )}
             </div>
           ))}
+          {contact ? null : (
+            <div className="flex flex-col gap-1.5">
+              <Label>Agregar a un grupo (opcional)</Label>
+              <select
+                value={groupChoice}
+                onChange={(e) => setGroupChoice(e.target.value)}
+                className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+              >
+                <option value="">Sin grupo</option>
+                {groups.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                  </option>
+                ))}
+                <option value={NEW_GROUP}>+ Crear grupo nuevo…</option>
+              </select>
+              {groupChoice === NEW_GROUP ? (
+                <Input
+                  value={newGroupName}
+                  onChange={(e) => setNewGroupName(e.target.value)}
+                  placeholder="Nombre del grupo nuevo"
+                  aria-label="Nombre del grupo nuevo"
+                  required
+                />
+              ) : null}
+            </div>
+          )}
         </form>
         <DialogFooter>
           {contact ? (

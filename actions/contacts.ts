@@ -19,7 +19,13 @@ async function requireUserId(): Promise<string | null> {
 
 const refresh = () => revalidatePath("/contacts");
 
-export async function createContact(input: ContactInput, groupId?: string): Promise<ActionResult> {
+const groupNameSchema = z.string().trim().min(1, "Ingresá un nombre").max(60);
+
+/** Creates a contact; optionally adds it to an existing group or to a new one (created if missing). */
+export async function createContact(
+  input: ContactInput,
+  group?: { id?: string; newName?: string },
+): Promise<ActionResult> {
   const userId = await requireUserId();
   if (!userId) return { error: "No autenticado" };
   const parsed = contactInputSchema.safeParse(input);
@@ -28,11 +34,27 @@ export async function createContact(input: ContactInput, groupId?: string): Prom
     where: { userId_email: { userId, email: parsed.data.email } },
   });
   if (exists) return { error: "Ya tenés un contacto con ese email" };
-  const group = groupId
-    ? await prisma.contactGroup.findFirst({ where: { id: groupId, userId }, select: { id: true } })
-    : null;
+
+  let groupId: string | null = null;
+  if (group?.newName !== undefined) {
+    const name = groupNameSchema.safeParse(group.newName);
+    if (!name.success) return { error: name.error.issues[0].message };
+    const found = await prisma.contactGroup.findUnique({
+      where: { userId_name: { userId, name: name.data } },
+    });
+    groupId = found
+      ? found.id
+      : (await prisma.contactGroup.create({ data: { userId, name: name.data } })).id;
+  } else if (group?.id) {
+    const found = await prisma.contactGroup.findFirst({
+      where: { id: group.id, userId },
+      select: { id: true },
+    });
+    groupId = found?.id ?? null;
+  }
+
   await prisma.contact.create({
-    data: { ...parsed.data, userId, ...(group ? { groups: { create: { groupId: group.id } } } : {}) },
+    data: { ...parsed.data, userId, ...(groupId ? { groups: { create: { groupId } } } : {}) },
   });
   refresh();
   return {};
@@ -110,8 +132,6 @@ export async function importContacts(
   refresh();
   return { added: fresh.length, existing: unique.length - fresh.length, invalid };
 }
-
-const groupNameSchema = z.string().trim().min(1, "Ingresá un nombre").max(60);
 
 export async function createGroup(name: string): Promise<ActionResult> {
   const userId = await requireUserId();
