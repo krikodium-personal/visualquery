@@ -1,7 +1,18 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { deleteResponses } from "@/actions/response-admin";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,11 +24,13 @@ import type {
 import { answerKeyLabel, formatChoiceWithOther } from "@/lib/question-options";
 
 export function IndividualResponses({
+  surveyId,
   questions,
   responses,
   customVariables = [],
   collectorNames = new Map(),
 }: {
+  surveyId: string;
   questions: AnalysisQuestion[];
   responses: AnalysisResponse[];
   customVariables?: { name: string; label: string }[];
@@ -30,7 +43,10 @@ export function IndividualResponses({
       ),
     [responses],
   );
+  const router = useRouter();
   const [index, setIndex] = useState(0);
+  const [confirmOpen, setConfirmOpen] = useState<"one" | "all" | null>(null);
+  const [pending, setPending] = useState(false);
   const current = ordered[index] ?? null;
 
   if (ordered.length === 0) {
@@ -41,6 +57,22 @@ export function IndividualResponses({
         </CardContent>
       </Card>
     );
+  }
+
+  async function handleDelete() {
+    const target = ordered[Math.min(index, ordered.length - 1)];
+    const ids = confirmOpen === "all" ? ordered.map((r) => r.id) : target ? [target.id] : [];
+    setPending(true);
+    const result = await deleteResponses(surveyId, ids);
+    setPending(false);
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+    toast.success(`${result.deleted} respuesta${result.deleted === 1 ? "" : "s"} eliminada${result.deleted === 1 ? "" : "s"}`);
+    setConfirmOpen(null);
+    setIndex(0);
+    router.refresh();
   }
 
   const safeIndex = Math.min(index, ordered.length - 1);
@@ -76,6 +108,13 @@ export function IndividualResponses({
             aria-label="Respuesta siguiente"
           >
             <ChevronRight className="size-4" />
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setConfirmOpen("one")}>
+            <Trash2 className="size-4" />
+            Eliminar
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setConfirmOpen("all")}>
+            Eliminar todas
           </Button>
         </div>
       </CardHeader>
@@ -127,6 +166,29 @@ export function IndividualResponses({
           })}
         </ul>
       </CardContent>
+      <Dialog open={confirmOpen !== null} onOpenChange={(next) => !pending && !next && setConfirmOpen(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {confirmOpen === "all" ? "¿Eliminar estas respuestas?" : "¿Eliminar esta respuesta?"}
+            </DialogTitle>
+            <DialogDescription>
+              {confirmOpen === "all"
+                ? `Se van a borrar permanentemente las ${ordered.length} respuestas que muestran los filtros actuales.`
+                : "Se va a borrar permanentemente esta respuesta."}{" "}
+              Esta acción no se puede deshacer.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" disabled={pending} onClick={() => setConfirmOpen(null)}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" disabled={pending} onClick={handleDelete}>
+              {pending ? "Eliminando…" : "Eliminar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

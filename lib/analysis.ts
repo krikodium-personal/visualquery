@@ -1,4 +1,4 @@
-import { isChoiceWithOther, type QuestionOption } from "@/lib/question-options";
+import { isChoiceWithOther, matrixCellKey, type QuestionOption } from "@/lib/question-options";
 import type { QuestionType } from "@/lib/question-types";
 
 export type AnalysisAnswerValue =
@@ -340,4 +340,124 @@ function endOfDayMs(isoDate: string): number {
 function formatDayLabel(isoDate: string): string {
   const [year, month, day] = isoDate.split("-");
   return `${day}/${month}`;
+}
+
+export type SummaryTable = {
+  columns: string[];
+  rows: { label: string; cells: string[] }[];
+};
+
+const STRUCTURED_TYPES: QuestionType[] = [
+  "ranking",
+  "rating_matrix",
+  "best_worst",
+  "dropdown_matrix",
+  "multiple_text",
+];
+
+export function isStructuredType(type: QuestionType): boolean {
+  return STRUCTURED_TYPES.includes(type);
+}
+
+function asRecordAnswer(answer: AnalysisAnswerValue): Record<string, string | number> {
+  return typeof answer === "object" && answer !== null && !Array.isArray(answer) ? answer : {};
+}
+
+function fmt(n: number): string {
+  return n.toLocaleString("es-AR", { maximumFractionDigits: 2 });
+}
+
+/** Summary table for the question types that don't fit a simple distribution chart. */
+export function buildSummaryTable(
+  question: AnalysisQuestion,
+  answers: AnalysisAnswerValue[],
+): SummaryTable {
+  const options = question.options;
+  const label = (value: string) => options.find((o) => o.value === value)?.label ?? value;
+
+  if (question.type === "ranking") {
+    const rows = options.map((option) => {
+      const positions = answers.flatMap((a) =>
+        Array.isArray(a) && a.includes(option.value) ? [a.indexOf(option.value) + 1] : [],
+      );
+      const avg = positions.length
+        ? positions.reduce((s, p) => s + p, 0) / positions.length
+        : null;
+      return { label: option.label, avg, count: positions.length };
+    });
+    rows.sort((a, b) => (a.avg ?? Infinity) - (b.avg ?? Infinity));
+    return {
+      columns: ["Posición promedio", "Respuestas"],
+      rows: rows.map((r) => ({
+        label: r.label,
+        cells: [r.avg === null ? "—" : fmt(r.avg), String(r.count)],
+      })),
+    };
+  }
+
+  if (question.type === "rating_matrix") {
+    return {
+      columns: ["Promedio", "Respuestas"],
+      rows: options.map((option) => {
+        const values = answers
+          .map((a) => Number(asRecordAnswer(a)[option.value]))
+          .filter((v) => Number.isFinite(v) && v > 0);
+        const avg = values.length ? values.reduce((s, v) => s + v, 0) / values.length : null;
+        return { label: option.label, cells: [avg === null ? "—" : fmt(avg), String(values.length)] };
+      }),
+    };
+  }
+
+  if (question.type === "best_worst") {
+    return {
+      columns: ["Mejor", "Peor"],
+      rows: options.map((option) => ({
+        label: option.label,
+        cells: (["best", "worst"] as const).map((key) =>
+          String(answers.filter((a) => asRecordAnswer(a)[key] === option.value).length),
+        ),
+      })),
+    };
+  }
+
+  if (question.type === "multiple_text") {
+    return {
+      columns: ["Respuestas", "Ejemplos"],
+      rows: options.map((option) => {
+        const texts = answers
+          .map((a) => String(asRecordAnswer(a)[option.value] ?? "").trim())
+          .filter(Boolean);
+        return { label: option.label, cells: [String(texts.length), texts.slice(0, 3).join(" · ") || "—"] };
+      }),
+    };
+  }
+
+  // dropdown_matrix: how often each choice was picked per row (and per column when present).
+  const rowOptions = options.filter((o) => o.kind === "row");
+  const columns = options.filter((o) => o.kind === "column");
+  const tally = (key: string) => {
+    const counts = new Map<string, number>();
+    for (const a of answers) {
+      const v = asRecordAnswer(a)[key];
+      if (v === undefined || v === "") continue;
+      counts.set(String(v), (counts.get(String(v)) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([value, n]) => `${label(value)}: ${n}`)
+      .join(" · ") || "—";
+  };
+  if (columns.length >= 2) {
+    return {
+      columns: columns.map((c) => c.label),
+      rows: rowOptions.map((row) => ({
+        label: row.label,
+        cells: columns.map((c) => tally(matrixCellKey(row.value, c.value))),
+      })),
+    };
+  }
+  return {
+    columns: ["Respuestas"],
+    rows: rowOptions.map((row) => ({ label: row.label, cells: [tally(row.value)] })),
+  };
 }

@@ -272,6 +272,7 @@ export function SurveyResultsAnalysis({
 
         <TabsContent value="individual" className="mt-4">
           <IndividualResponses
+            surveyId={surveyId}
             questions={questionsShown}
             responses={filteredResponses}
             customVariables={data.customVariables}

@@ -15,6 +15,8 @@ import {
   buildChoiceRows,
   buildRatingRows,
   buildSliderRows,
+  buildSummaryTable,
+  isStructuredType,
   buildTrendPoints,
   defaultViewForType,
   isAverageType,
@@ -26,6 +28,7 @@ import {
   type AnalysisResponse,
   type ChartViewMode,
   type CountRow,
+  type SummaryTable,
 } from "@/lib/analysis";
 import { ratingMaxFromOptions } from "@/lib/rating-options";
 import { answerKeyLabel, formatChoiceWithOther } from "@/lib/question-options";
@@ -167,6 +170,8 @@ export function QuestionResultCard({
             />
             {showTable ? <ResultsDataTable rows={distributionRows} /> : null}
           </>
+        ) : isStructuredType(question.type) ? (
+          <SummaryTableView table={buildSummaryTable(question, answers)} />
         ) : (
           <TextResults answers={answers} options={question.options} />
         )}
@@ -220,4 +225,35 @@ function formatAnswer(answer: AnalysisAnswerValue, labels: Map<string, string>):
   return Object.entries(answer)
     .map(([key, value]) => `${answerKeyLabel(key, labels)}: ${labels.get(String(value)) ?? value}`)
     .join(" · ");
+}
+
+function SummaryTableView({ table }: { table: SummaryTable }) {
+  return (
+    <div className="overflow-x-auto rounded-lg border">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b bg-muted/40 text-left text-muted-foreground">
+            <th className="px-3 py-2 font-medium" />
+            {table.columns.map((column) => (
+              <th key={column} className="px-3 py-2 font-medium">
+                {column}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {table.rows.map((row) => (
+            <tr key={row.label} className="border-b last:border-0">
+              <td className="px-3 py-2 font-medium">{row.label}</td>
+              {row.cells.map((cell, index) => (
+                <td key={index} className="px-3 py-2 tabular-nums">
+                  {cell}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
