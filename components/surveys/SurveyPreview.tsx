@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   Check,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   MessageSquare,
   Monitor,
@@ -425,7 +426,8 @@ export function SurveyPreview({
             nativeButton={false}
             render={<Link href={`/surveys/${surveyId}/design`} />}
           >
-            Editar encuesta
+            <ChevronLeft className="size-4" />
+            Volver al editor
           </Button>
           <Button
             size="sm"
