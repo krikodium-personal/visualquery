@@ -114,7 +114,7 @@ export function HeroCanvas({ t }: { t: Content["canvas"] }) {
             <polygon
               key={i}
               points={starPoints(406 + i * 34, 82, 13)}
-              fill={i < 4 ? AMBER : "none"}
+              fill={i < 2 ? AMBER : "none"}
               stroke={AMBER}
               strokeWidth={1.5}
               strokeLinejoin="round"
