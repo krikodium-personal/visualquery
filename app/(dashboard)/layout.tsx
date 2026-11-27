@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth, signOut } from "@/lib/auth";
-import { Button } from "@/components/ui/button";
+import { prisma } from "@/lib/prisma";
+import { AccountMenu } from "@/components/account/AccountMenu";
 import { NotificationCenter } from "@/components/notifications/NotificationCenter";
 import { DashboardHeaderActions } from "@/components/theme/DashboardHeader";
 
@@ -10,6 +11,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (!session?.user) {
     redirect("/login");
   }
+
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { name: true, email: true },
+  });
 
   return (
     <div className="flex h-dvh flex-col bg-background text-foreground">
@@ -23,16 +29,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
               Planes
             </Link>
             <NotificationCenter />
-            <form
-              action={async () => {
+            <AccountMenu
+              name={user?.name ?? null}
+              email={user?.email ?? session.user.email ?? ""}
+              signOutAction={async () => {
                 "use server";
                 await signOut({ redirectTo: "/" });
               }}
-            >
-              <Button type="submit" variant="ghost" size="sm">
-                Cerrar sesión ({session.user.email})
-              </Button>
-            </form>
+            />
           </DashboardHeaderActions>
         </div>
       </header>

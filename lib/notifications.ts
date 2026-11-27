@@ -16,18 +16,20 @@ export async function notifyResponseCompleted(surveyId: string, collectorId: str
   try {
     const survey = await prisma.survey.findUnique({
       where: { id: surveyId },
-      select: { ownerId: true },
+      select: { ownerId: true, owner: { select: { notifyResponses: true } } },
     });
     if (!survey) return;
 
     const base = { userId: survey.ownerId, surveyId };
-    await prisma.notification.upsert({
-      where: {
-        userId_surveyId_type_day: { ...base, type: "new_responses", day: localDay() },
-      },
-      create: { ...base, type: "new_responses", day: localDay(), count: 1 },
-      update: { count: { increment: 1 }, readAt: null },
-    });
+    if (survey.owner.notifyResponses) {
+      await prisma.notification.upsert({
+        where: {
+          userId_surveyId_type_day: { ...base, type: "new_responses", day: localDay() },
+        },
+        create: { ...base, type: "new_responses", day: localDay(), count: 1 },
+        update: { count: { increment: 1 }, readAt: null },
+      });
+    }
 
     const collector = collectorId
       ? await prisma.collector.findUnique({

@@ -11,6 +11,8 @@ model User {
   email        String   @unique
   passwordHash String
   name         String?
+  // Alerts for new responses (SurveyMonkey "Alertas de respuestas").
+  notifyResponses Boolean @default(true)
   createdAt    DateTime @default(now())
 
   surveys       Survey[]
