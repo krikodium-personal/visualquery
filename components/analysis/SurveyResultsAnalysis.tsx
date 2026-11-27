@@ -1,8 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Download, Filter, GitBranch, ListTree, Users, X } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Download, GitBranch, ListTree, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -37,7 +36,6 @@ export function SurveyResultsAnalysis({
   initialViews: AnalysisView[];
 }) {
   const [rules, setRules] = useState<AnalysisRulesState>(() => structuredClone(EMPTY_RULES));
-  const [panelOpen, setPanelOpen] = useState(false);
   const [views, setViews] = useState<AnalysisView[]>(initialViews);
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
   const [tab, setTab] = useState("summary");
@@ -120,13 +118,58 @@ export function SurveyResultsAnalysis({
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-8">
+    <div className="flex w-full flex-col gap-6 px-6 py-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold">Análisis</h2>
           <p className="text-sm text-muted-foreground">{data.surveyTitle}</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+      </div>
+
+      <Tabs value={tab} onValueChange={(value) => setTab(String(value))}>
+        <TabsList variant="line">
+          <TabsTrigger value="summary" className="gap-1.5 px-3">
+            <ListTree className="size-3.5" />
+            Resumen por pregunta
+          </TabsTrigger>
+          <TabsTrigger value="individual" className="gap-1.5 px-3">
+            <Users className="size-3.5" />
+            Respuestas individuales
+          </TabsTrigger>
+          <TabsTrigger value="flow" className="gap-1.5 px-3">
+            <GitBranch className="size-3.5" />
+            Flujo
+          </TabsTrigger>
+          {compareOn ? (
+            <TabsTrigger value="compare" className="gap-1.5 px-3">
+              Comparar
+            </TabsTrigger>
+          ) : null}
+        </TabsList>
+
+        <div className="mt-4 grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)] lg:items-start">
+        <div className="flex flex-col gap-4 lg:sticky lg:top-4">
+          <AnalysisRulesPanel
+            open
+            inline
+            onOpenChange={() => {}}
+            questions={data.questions}
+            customVariables={data.customVariables}
+            value={rules}
+            onChange={updateRules}
+          />
+          <AnalysisViewsBar
+        surveyId={surveyId}
+        views={views}
+        rules={rules}
+        activeViewId={activeViewId}
+        onViewsChange={setViews}
+        onApplyView={applyView}
+      />
+        </div>
+
+        <div className="flex min-w-0 flex-col gap-6">
+        <div className="flex flex-wrap justify-end gap-2">
           {data.collectors.length > 1 || hasOrphanResponses ? (
             <select
               aria-label="Filtrar por recopilador"
@@ -147,30 +190,8 @@ export function SurveyResultsAnalysis({
             <Download className="size-4" />
             Exportar CSV
           </Button>
-          <Button
-            variant={activeCount > 0 ? "default" : "outline"}
-            onClick={() => setPanelOpen(true)}
-            className="gap-1.5"
-          >
-            <Filter className="size-4" />
-            Parámetros
-            {activeCount > 0 ? (
-              <Badge variant="secondary" className="ml-0.5 bg-background/20 text-current">
-                {activeCount}
-              </Badge>
-            ) : null}
-          </Button>
         </div>
-      </div>
 
-      <AnalysisViewsBar
-        surveyId={surveyId}
-        views={views}
-        rules={rules}
-        activeViewId={activeViewId}
-        onViewsChange={setViews}
-        onApplyView={applyView}
-      />
 
       <div className="grid gap-4 sm:grid-cols-3">
         <Card>
@@ -200,7 +221,7 @@ export function SurveyResultsAnalysis({
       </div>
 
       {activeCount > 0 ? (
-        <div className="rounded-xl border bg-muted/30 px-4 py-3">
+        <div className="rounded-xl border border-blue-300 bg-blue-50 px-4 py-3 dark:border-blue-800 dark:bg-blue-950/40">
           <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
             Parámetros activos · {filteredCount} de {totalResponses} encuestados
             {show
@@ -226,27 +247,6 @@ export function SurveyResultsAnalysis({
           </div>
         </div>
       ) : null}
-
-      <Tabs value={tab} onValueChange={(value) => setTab(String(value))}>
-        <TabsList variant="line">
-          <TabsTrigger value="summary" className="gap-1.5 px-3">
-            <ListTree className="size-3.5" />
-            Resumen por pregunta
-          </TabsTrigger>
-          <TabsTrigger value="individual" className="gap-1.5 px-3">
-            <Users className="size-3.5" />
-            Respuestas individuales
-          </TabsTrigger>
-          <TabsTrigger value="flow" className="gap-1.5 px-3">
-            <GitBranch className="size-3.5" />
-            Flujo
-          </TabsTrigger>
-          {compareOn ? (
-            <TabsTrigger value="compare" className="gap-1.5 px-3">
-              Comparar
-            </TabsTrigger>
-          ) : null}
-        </TabsList>
 
         <TabsContent value="summary" className="mt-4">
           {questionsShown.length === 0 ? (
@@ -297,16 +297,10 @@ export function SurveyResultsAnalysis({
             />
           </TabsContent>
         ) : null}
+        </div>
+        </div>
       </Tabs>
 
-      <AnalysisRulesPanel
-        open={panelOpen}
-        onOpenChange={setPanelOpen}
-        questions={data.questions}
-        customVariables={data.customVariables}
-        value={rules}
-        onChange={updateRules}
-      />
     </div>
   );
 }

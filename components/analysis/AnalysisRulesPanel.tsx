@@ -33,6 +33,7 @@ type FilterDraftKind = "question_answer" | "completeness" | "period" | "variable
 
 export function AnalysisRulesPanel({
   open,
+  inline = false,
   onOpenChange,
   questions,
   customVariables = [],
@@ -40,6 +41,8 @@ export function AnalysisRulesPanel({
   onChange,
 }: {
   open: boolean;
+  /** Render as a fixed column in the page instead of a drawer over it. */
+  inline?: boolean;
   onOpenChange: (open: boolean) => void;
   questions: AnalysisQuestion[];
   customVariables?: { name: string; label: string }[];
@@ -67,7 +70,7 @@ export function AnalysisRulesPanel({
     filterable.find((q) => q.id === compareQuestionId) ?? filterable[0] ?? null;
   const items = parameterList(value);
 
-  if (!open) return null;
+  if (!open && !inline) return null;
 
   function resetDrafts() {
     setQaQuestionId(filterable[0]?.id ?? "");
@@ -136,23 +139,33 @@ export function AnalysisRulesPanel({
 
   return (
     <>
-      <button
-        type="button"
-        aria-label="Cerrar parámetros"
-        className="fixed inset-0 z-40 bg-black/20"
-        onClick={() => onOpenChange(false)}
-      />
-      <aside className="fixed inset-y-0 left-0 z-50 flex w-full max-w-md flex-col border-r bg-background shadow-xl">
+      {inline ? null : (
+        <button
+          type="button"
+          aria-label="Cerrar parámetros"
+          className="fixed inset-0 z-40 bg-black/20"
+          onClick={() => onOpenChange(false)}
+        />
+      )}
+      <aside
+        className={
+          inline
+            ? "flex max-h-[calc(100vh-10rem)] min-h-80 w-full flex-col rounded-xl border bg-background"
+            : "fixed inset-y-0 left-0 z-50 flex w-full max-w-md flex-col border-r bg-background shadow-xl"
+        }
+      >
         <div className="flex items-center justify-between border-b px-4 py-3">
           <h2 className="text-base font-semibold">Parámetros</h2>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => onOpenChange(false)}
-            aria-label="Cerrar"
-          >
-            <X className="size-4" />
-          </Button>
+          {inline ? null : (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => onOpenChange(false)}
+              aria-label="Cerrar"
+            >
+              <X className="size-4" />
+            </Button>
+          )}
         </div>
 
         {mode === "list" ? (
@@ -220,9 +233,11 @@ export function AnalysisRulesPanel({
               >
                 Limpiar todo
               </Button>
-              <Button className="flex-1" onClick={() => onOpenChange(false)}>
-                Listo
-              </Button>
+              {inline ? null : (
+                <Button className="flex-1" onClick={() => onOpenChange(false)}>
+                  Listo
+                </Button>
+              )}
             </div>
           </>
         ) : null}
